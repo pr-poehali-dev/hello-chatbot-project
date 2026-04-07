@@ -3,7 +3,32 @@ import Icon from "@/components/ui/icon";
 
 type Section = "home" | "tracker" | "reference";
 
-const SYMPTOM_GROUPS = [
+// Симптомы с градацией интенсивности (субъективно оцениваемые / функционально значимые)
+// Вес по интенсивности: 1-2 → 0 баллов, 3 → 0.5, 4 → 1.0, 5 → 2.0
+const GRADED_SYMPTOMS = new Set([
+  "Слабость", "Усталость", "Снижение аппетита",
+  "Одышка", "Кашель", "Кашель с мокротой", "Боль в груди", "Свистящее дыхание",
+  "Учащённое сердцебиение", "Отёки ног", "Головокружение",
+  "Тошнота", "Рвота", "Боль в животе", "Диарея", "Запор", "Изжога", "Вздутие живота",
+  "Головная боль", "Нарушение сна", "Тревожность", "Раздражительность",
+  "Боль в суставах", "Боль в спине", "Боль в мышцах", "Ограничение подвижности",
+]);
+
+// Бинарные симптомы (сам факт наличия = 1 балл, без градации)
+// Кровохарканье, обмороки и т.п. — клинически значимы независимо от интенсивности
+const BINARY_SYMPTOMS = new Set([
+  "Потеря веса", "Повышенная температура", "Ночная потливость",
+  "Кровохарканье",
+  "Перебои в работе сердца", "Обмороки",
+  "Онемение конечностей", "Нарушение памяти",
+  "Отёк суставов",
+]);
+
+// Максимально возможный балл (для нормировки)
+// GRADED: каждый может дать max 2.0 | BINARY: каждый даёт 1.0
+const MAX_SCORE = GRADED_SYMPTOMS.size * 2.0 + BINARY_SYMPTOMS.size * 1.0;
+
+const SYMPTOM_GROUPS: { title: string; symptoms: string[] }[] = [
   {
     title: "Общее состояние",
     symptoms: ["Слабость", "Усталость", "Снижение аппетита", "Потеря веса", "Повышенная температура", "Ночная потливость"],
@@ -30,8 +55,6 @@ const SYMPTOM_GROUPS = [
   },
 ];
 
-const TOTAL_SYMPTOMS = SYMPTOM_GROUPS.reduce((acc, g) => acc + g.symptoms.length, 0);
-
 const INTENSITY_LABELS: Record<number, string> = {
   1: "Едва заметно",
   2: "Слабо",
@@ -39,6 +62,16 @@ const INTENSITY_LABELS: Record<number, string> = {
   4: "Сильно",
   5: "Очень сильно",
 };
+
+// Вес одного симптома в баллах
+function symptomWeight(name: string, intensity: number): number {
+  if (BINARY_SYMPTOMS.has(name)) return 1.0;
+  // GRADED: 1-2 → 0, 3 → 0.5, 4 → 1.0, 5 → 2.0
+  if (intensity <= 2) return 0;
+  if (intensity === 3) return 0.5;
+  if (intensity === 4) return 1.0;
+  return 2.0;
+}
 
 const ECOG_LEVELS = [
   { score: 0, label: "Норма", desc: "Полностью активен, без ограничений", color: "#4caf7d" },
@@ -48,15 +81,20 @@ const ECOG_LEVELS = [
   { score: 4, label: "Тяжёлое нарушение", desc: "Не способен к самообслуживанию, прикован к постели или креслу", color: "#f44336" },
 ];
 
-function calcEcog(selected: Record<string, number>): number {
-  const count = Object.keys(selected).length;
-  const ratio = count / TOTAL_SYMPTOMS;
-  if (ratio === 0) return 0;
-  if (ratio < 0.1) return 0;
-  if (ratio < 0.25) return 1;
-  if (ratio < 0.45) return 2;
-  if (ratio < 0.65) return 3;
-  return 4;
+function calcEcog(selected: Record<string, number>): { score: number; points: number; percent: number } {
+  const points = Object.entries(selected).reduce(
+    (acc, [name, intensity]) => acc + symptomWeight(name, intensity),
+    0
+  );
+  const percent = Math.min((points / MAX_SCORE) * 100, 100);
+  let score = 0;
+  if (percent === 0) score = 0;
+  else if (percent < 8) score = 0;
+  else if (percent < 20) score = 1;
+  else if (percent < 38) score = 2;
+  else if (percent < 58) score = 3;
+  else score = 4;
+  return { score, points, percent };
 }
 
 const REFERENCE_SECTIONS = [
@@ -116,9 +154,8 @@ export default function Index() {
   };
 
   const selectedCount = Object.keys(selected).length;
-  const ecogScore = calcEcog(selected);
+  const { score: ecogScore, points: ecogPoints, percent: ecogPercent } = calcEcog(selected);
   const ecogInfo = ECOG_LEVELS[ecogScore];
-  const ecogPercent = (selectedCount / TOTAL_SYMPTOMS) * 100;
 
   const handleSave = () => setSaved(true);
   const handleReset = () => { setSelected({}); setSaved(false); };
@@ -321,10 +358,12 @@ export default function Index() {
                 </div>
                 <p className="text-sm text-muted-foreground mt-1 max-w-sm">{ecogInfo.desc}</p>
               </div>
-              <div className="hidden md:flex flex-col items-end gap-1">
-                <span className="text-xs text-muted-foreground">
-                  {selectedCount} из {TOTAL_SYMPTOMS} симптомов
-                </span>
+              <div className="hidden md:flex flex-col items-end gap-1.5">
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-foreground">{ecogPoints.toFixed(1)}</p>
+                  <p className="text-xs text-muted-foreground">баллов из {MAX_SCORE.toFixed(0)}</p>
+                </div>
+                <span className="text-xs text-muted-foreground">{selectedCount} симптомов отмечено</span>
               </div>
             </div>
 
@@ -379,6 +418,8 @@ export default function Index() {
                 <div className="flex flex-wrap gap-2">
                   {group.symptoms.map((symptom) => {
                     const isSelected = !!selected[symptom];
+                    const isBinary = BINARY_SYMPTOMS.has(symptom);
+                    const currentWeight = isSelected ? symptomWeight(symptom, selected[symptom]) : 0;
                     return (
                       <div key={symptom} className="flex flex-col">
                         <button
@@ -393,8 +434,16 @@ export default function Index() {
                             <Icon name="Check" size={12} className="inline mr-1.5 -mt-0.5" />
                           )}
                           {symptom}
+                          {!isSelected && isBinary && (
+                            <span className="ml-1.5 text-xs text-muted-foreground font-normal">·1</span>
+                          )}
                         </button>
-                        {isSelected && (
+                        {isSelected && isBinary && (
+                          <p className="text-xs text-muted-foreground mt-1.5 px-1">
+                            +1.0 балл (факт наличия)
+                          </p>
+                        )}
+                        {isSelected && !isBinary && (
                           <div className="mt-2 px-1 animate-fade-in">
                             <div className="flex items-center gap-1">
                               {[1, 2, 3, 4, 5].map((v) => (
@@ -413,6 +462,10 @@ export default function Index() {
                             </div>
                             <p className="text-xs text-muted-foreground mt-1 pl-0.5">
                               {INTENSITY_LABELS[selected[symptom]]}
+                              {" · "}
+                              <span className="font-medium text-foreground">
+                                {currentWeight === 0 ? "0 баллов" : `+${currentWeight} балл${currentWeight === 2 ? "а" : ""}`}
+                              </span>
                             </p>
                           </div>
                         )}
@@ -431,7 +484,7 @@ export default function Index() {
                 <div>
                   <p className="font-medium text-foreground">
                     {selectedCount}&nbsp;
-                    {selectedCount === 1 ? "симптом" : selectedCount < 5 ? "симптома" : "симптомов"} · ECOG&nbsp;
+                    {selectedCount === 1 ? "симптом" : selectedCount < 5 ? "симптома" : "симптомов"} · {ecogPoints.toFixed(1)} балл. · ECOG&nbsp;
                     <span style={{ color: ecogInfo.color, fontWeight: 600 }}>{ecogScore}</span>
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
