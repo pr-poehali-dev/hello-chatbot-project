@@ -148,19 +148,43 @@ const VAS_STEPS = [
   { value: 10, emoji: "🤯", label: "Максимальная",     color: "#7f1d1d" },
 ];
 
-const RECIST_OPTIONS = [
-  { code: "CR",  label: "Полный ответ",           desc: "Исчезновение всех целевых очагов",                         color: "#22c55e" },
-  { code: "PR",  label: "Частичный ответ",        desc: "Уменьшение суммы диаметров ≥30%",                         color: "#4ade80" },
-  { code: "SD",  label: "Стабилизация",           desc: "Изменения не достигают CR/PR/PD",                         color: "#f59e0b" },
-  { code: "PD",  label: "Прогрессирование",       desc: "Увеличение суммы диаметров ≥20% или новые очаги",         color: "#ef4444" },
-  { code: "NE",  label: "Не оценивалось",         desc: "Недостаточно данных для оценки ответа",                   color: "#94a3b8" },
+// GAD-7 (Generalized Anxiety Disorder 7-item scale)
+const GAD7_QUESTIONS = [
+  "Ощущение нервозности, тревоги или нахождения «на взводе»",
+  "Невозможность остановить беспокойство или взять его под контроль",
+  "Чрезмерное беспокойство по разным поводам",
+  "Трудность расслабиться",
+  "Такое беспокойство, что трудно усидеть на месте",
+  "Лёгкая раздражимость или вспыльчивость",
+  "Ощущение страха, как будто может случиться что-то ужасное",
 ];
+
+const GAD7_OPTIONS = [
+  { value: 0, label: "Вообще нет" },
+  { value: 1, label: "Несколько дней" },
+  { value: 2, label: "Больше половины дней" },
+  { value: 3, label: "Почти каждый день" },
+];
+
+function calcGad7Level(total: number): { label: string; color: string; desc: string } {
+  if (total <= 4)  return { label: "Минимальная тревога",   color: "#22c55e", desc: "Клинически незначимый уровень тревожности" };
+  if (total <= 9)  return { label: "Лёгкая тревога",        color: "#f59e0b", desc: "Рекомендуется наблюдение и самопомощь" };
+  if (total <= 14) return { label: "Умеренная тревога",     color: "#f97316", desc: "Показана консультация психолога/психиатра" };
+  return              { label: "Тяжёлая тревога",          color: "#ef4444", desc: "Необходима срочная психиатрическая помощь" };
+}
+
+interface PainMed {
+  id: string;
+  name: string;
+  dose: string;
+  freq: string;
+}
 
 interface ScaleRecord {
   date: string;
   ecog: number;
   vas: number | null;
-  recist: string | null;
+  gad7: number | null;
 }
 
 interface NosologySection {
@@ -519,10 +543,29 @@ export default function Index() {
   const touchStartX = useRef<number>(0);
 
   const [vasScore, setVasScore] = useState<number | null>(null);
-  const [recistScore, setRecistScore] = useState<string | null>(null);
+  const [gad7Answers, setGad7Answers] = useState<(number | null)[]>(Array(7).fill(null));
+  const [painMeds, setPainMeds] = useState<PainMed[]>([]);
+  const [addMedName, setAddMedName] = useState("");
+  const [addMedDose, setAddMedDose] = useState("");
+  const [addMedFreq, setAddMedFreq] = useState("");
   const [scaleRecords, setScaleRecords] = useState<ScaleRecord[]>([]);
 
-  const TRACKER_PAGES = ["ECOG / Симптомы", "Боль (ВАШ)", "RECIST", "Графики"];
+  const gad7Total = gad7Answers.every(a => a !== null) ? gad7Answers.reduce((s, v) => s + (v ?? 0), 0) : null;
+  const gad7Level = gad7Total !== null ? calcGad7Level(gad7Total) : null;
+
+  const setGad7Answer = (qi: number, val: number) => {
+    setGad7Answers(prev => { const next = [...prev]; next[qi] = val; return next; });
+  };
+
+  const addPainMed = () => {
+    if (!addMedName.trim()) return;
+    setPainMeds(prev => [...prev, { id: Date.now().toString(), name: addMedName.trim(), dose: addMedDose.trim(), freq: addMedFreq.trim() }]);
+    setAddMedName(""); setAddMedDose(""); setAddMedFreq("");
+  };
+
+  const removePainMed = (id: string) => setPainMeds(prev => prev.filter(m => m.id !== id));
+
+  const TRACKER_PAGES = ["ECOG / Симптомы", "Боль (ВАШ)", "Тревога (GAD-7)", "Графики"];
 
   const goToPage = (idx: number) => {
     setTrackerPage(Math.max(0, Math.min(TRACKER_PAGES.length - 1, idx)));
@@ -542,7 +585,7 @@ export default function Index() {
       date: todayKey,
       ecog: ecogScore,
       vas: vasScore,
-      recist: recistScore,
+      gad7: gad7Total,
     };
     setScaleRecords((prev) => {
       const filtered = prev.filter((r) => r.date !== todayKey);
@@ -886,69 +929,144 @@ export default function Index() {
                   </div>
                 </div>
 
-                {/* VAS description table */}
+                {/* Pain medications list */}
                 <div className="bg-card border border-border rounded-2xl p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Интерпретация шкалы</p>
-                  <div className="space-y-2">
-                    {[
-                      { range: "0", desc: "Боль отсутствует полностью" },
-                      { range: "1–3", desc: "Лёгкая — не мешает повседневной деятельности" },
-                      { range: "4–6", desc: "Умеренная — требует коррекции анальгезии" },
-                      { range: "7–9", desc: "Сильная — значительно ограничивает активность" },
-                      { range: "10", desc: "Максимальная — нестерпимая боль, экстренная помощь" },
-                    ].map((row) => (
-                      <div key={row.range} className="flex items-start gap-3">
-                        <span className="text-xs font-bold text-foreground w-8 flex-shrink-0 pt-0.5">{row.range}</span>
-                        <span className="text-sm text-muted-foreground">{row.desc}</span>
-                      </div>
-                    ))}
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Противоболевая терапия</p>
+                  <p className="text-sm text-muted-foreground mb-4">Препараты, которые вы принимаете для контроля боли</p>
+
+                  {/* Add form */}
+                  <div className="flex flex-col gap-2 mb-4">
+                    <input
+                      type="text"
+                      value={addMedName}
+                      onChange={e => setAddMedName(e.target.value)}
+                      placeholder="Название препарата (напр. Трамадол)"
+                      className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 placeholder:text-muted-foreground"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={addMedDose}
+                        onChange={e => setAddMedDose(e.target.value)}
+                        placeholder="Доза (напр. 50 мг)"
+                        className="flex-1 px-4 py-2.5 bg-secondary border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 placeholder:text-muted-foreground"
+                      />
+                      <input
+                        type="text"
+                        value={addMedFreq}
+                        onChange={e => setAddMedFreq(e.target.value)}
+                        placeholder="Кратность (напр. 2×/день)"
+                        className="flex-1 px-4 py-2.5 bg-secondary border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 placeholder:text-muted-foreground"
+                      />
+                      <button
+                        onClick={addPainMed}
+                        disabled={!addMedName.trim()}
+                        className="px-4 py-2.5 bg-foreground text-background rounded-xl text-sm font-medium hover:opacity-85 transition-opacity disabled:opacity-40 flex-shrink-0"
+                      >
+                        <Icon name="Plus" size={16} />
+                      </button>
+                    </div>
                   </div>
+
+                  {/* List */}
+                  {painMeds.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-3">Препараты не добавлены</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {painMeds.map(med => (
+                        <div key={med.id} className="flex items-center gap-3 p-3 bg-secondary rounded-xl">
+                          <div className="w-7 h-7 rounded-lg bg-card flex items-center justify-center flex-shrink-0">
+                            <Icon name="Pill" size={14} className="text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">{med.name}</p>
+                            {(med.dose || med.freq) && (
+                              <p className="text-xs text-muted-foreground">{[med.dose, med.freq].filter(Boolean).join(" · ")}</p>
+                            )}
+                          </div>
+                          <button onClick={() => removePainMed(med.id)} className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+                            <Icon name="X" size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* ── PAGE 3: RECIST ── */}
+            {/* ── PAGE 3: GAD-7 ── */}
             {trackerPage === 2 && (
               <div className="animate-fade-in">
-                <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Критерии RECIST 1.1</p>
-                  <p className="text-sm text-muted-foreground mb-6">Оценка ответа опухоли на системное лечение по данным визуализации</p>
+                {/* Result banner */}
+                {gad7Level !== null ? (
+                  <div className="flex items-center gap-4 p-5 rounded-2xl mb-6 border-2" style={{ backgroundColor: gad7Level.color + "12", borderColor: gad7Level.color + "40" }}>
+                    <div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: gad7Level.color + "20" }}>
+                      <span className="font-display text-2xl font-bold" style={{ color: gad7Level.color }}>{gad7Total}</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">{gad7Level.label}</p>
+                      <p className="text-sm text-muted-foreground">{gad7Level.desc}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-4 rounded-2xl bg-secondary mb-6">
+                    <Icon name="Brain" size={20} className="text-muted-foreground flex-shrink-0" />
+                    <p className="text-sm text-muted-foreground">Ответьте на все 7 вопросов, чтобы получить оценку уровня тревожности</p>
+                  </div>
+                )}
 
-                  <div className="space-y-3">
-                    {RECIST_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.code}
-                        onClick={() => setRecistScore(opt.code)}
-                        className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 text-left transition-all ${
-                          recistScore === opt.code ? "border-current" : "border-border hover:border-foreground/20"
-                        }`}
-                        style={{
-                          borderColor: recistScore === opt.code ? opt.color : undefined,
-                          backgroundColor: recistScore === opt.code ? opt.color + "10" : undefined,
-                        }}
-                      >
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: opt.color + "20" }}>
-                          <span className="text-sm font-bold" style={{ color: opt.color }}>{opt.code}</span>
+                <div className="bg-card border border-border rounded-2xl overflow-hidden mb-4">
+                  <div className="px-5 py-4 border-b border-border">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">GAD-7 · Шкала генерализованного тревожного расстройства</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">Как часто за последние 2 недели вас беспокоило следующее?</p>
+                  </div>
+
+                  <div className="divide-y divide-border">
+                    {GAD7_QUESTIONS.map((q, qi) => (
+                      <div key={qi} className="px-5 py-4">
+                        <p className="text-sm text-foreground mb-3 leading-relaxed">
+                          <span className="text-xs font-bold text-muted-foreground mr-2">{qi + 1}.</span>
+                          {q}
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {GAD7_OPTIONS.map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setGad7Answer(qi, opt.value)}
+                              className={`px-3 py-2 rounded-xl text-xs font-medium border-2 transition-all text-center ${
+                                gad7Answers[qi] === opt.value
+                                  ? "border-foreground bg-foreground text-background"
+                                  : "border-border hover:border-foreground/30 text-foreground"
+                              }`}
+                            >
+                              <span className="block font-bold text-sm">{opt.value}</span>
+                              {opt.label}
+                            </button>
+                          ))}
                         </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-foreground mb-0.5">{opt.label}</p>
-                          <p className="text-sm text-muted-foreground leading-relaxed">{opt.desc}</p>
-                        </div>
-                        {recistScore === opt.code && (
-                          <div className="flex-shrink-0 mt-1">
-                            <Icon name="CheckCircle" size={20} style={{ color: opt.color } as React.CSSProperties} />
-                          </div>
-                        )}
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="bg-secondary rounded-2xl px-5 py-4 flex items-start gap-3">
-                  <Icon name="Info" size={16} className="text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    RECIST 1.1 (Response Evaluation Criteria in Solid Tumors) — международный стандарт оценки ответа на лечение при солидных опухолях. Требует сопоставления данных КТ/МРТ с исходными измерениями.
-                  </p>
+                {/* Interpretation */}
+                <div className="bg-card border border-border rounded-2xl p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Интерпретация GAD-7</p>
+                  <div className="space-y-2">
+                    {[
+                      { range: "0–4",  label: "Минимальная тревога", color: "#22c55e" },
+                      { range: "5–9",  label: "Лёгкая тревога",       color: "#f59e0b" },
+                      { range: "10–14",label: "Умеренная тревога",    color: "#f97316" },
+                      { range: "15–21",label: "Тяжёлая тревога",      color: "#ef4444" },
+                    ].map(row => (
+                      <div key={row.range} className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
+                        <span className="text-xs font-bold text-foreground w-12 flex-shrink-0">{row.range}</span>
+                        <span className="text-sm text-muted-foreground">{row.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -1034,29 +1152,35 @@ export default function Index() {
                       );
                     })()}
 
-                    {/* RECIST timeline */}
-                    {scaleRecords.some(r => r.recist !== null) && (
-                      <div className="bg-card border border-border rounded-2xl p-5">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Динамика ответа (RECIST)</p>
-                        <div className="flex items-center gap-3 overflow-x-auto pb-1">
-                          {scaleRecords.filter(r => r.recist !== null).map((rec, i, arr) => {
-                            const opt = RECIST_OPTIONS.find(o => o.code === rec.recist)!;
-                            const [,m,d] = rec.date.split("-");
-                            return (
-                              <div key={rec.date} className="flex items-center gap-3 flex-shrink-0">
-                                <div className="flex flex-col items-center gap-1.5">
-                                  <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: opt.color + "20" }}>
-                                    <span className="text-xs font-bold" style={{ color: opt.color }}>{opt.code}</span>
+                    {/* GAD-7 chart */}
+                    {scaleRecords.some(r => r.gad7 !== null) && (() => {
+                      const maxVal = 21;
+                      return (
+                        <div className="bg-card border border-border rounded-2xl p-5">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Динамика тревоги (GAD-7)</p>
+                          <div className="flex gap-2 items-end h-32">
+                            <div className="flex flex-col justify-between h-full text-right pr-2">
+                              {[21,15,10,5,0].map(v => <span key={v} className="text-xs text-muted-foreground leading-none">{v}</span>)}
+                            </div>
+                            <div className="flex-1 flex items-end gap-2 border-l border-b border-border h-full pl-2 relative">
+                              {scaleRecords.filter(r => r.gad7 !== null).map((rec) => {
+                                const v = rec.gad7!;
+                                const pct = (v / maxVal) * 100;
+                                const color = calcGad7Level(v).color;
+                                const [,m,d] = rec.date.split("-");
+                                return (
+                                  <div key={rec.date} className="flex flex-col items-center gap-1 flex-1 min-w-0 h-full justify-end">
+                                    <span className="text-xs font-bold" style={{ color }}>{v}</span>
+                                    <div className="w-full rounded-t-lg transition-all" style={{ height: `${Math.max(pct, 5)}%`, backgroundColor: color + "80", border: `1.5px solid ${color}` }} />
+                                    <span className="text-xs text-muted-foreground truncate w-full text-center">{d}.{m}</span>
                                   </div>
-                                  <span className="text-xs text-muted-foreground">{d}.{m}</span>
-                                </div>
-                                {i < arr.length - 1 && <Icon name="ArrowRight" size={14} className="text-muted-foreground flex-shrink-0" />}
-                              </div>
-                            );
-                          })}
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -1071,7 +1195,7 @@ export default function Index() {
                   <p className="font-medium text-foreground text-sm">
                     ECOG&nbsp;<span style={{ color: ecogInfo.color, fontWeight: 700 }}>{ecogScore}</span>
                     {vasScore !== null && <> · ВАШ&nbsp;<span style={{ color: VAS_STEPS[vasScore].color, fontWeight: 700 }}>{vasScore}</span></>}
-                    {recistScore && <> · RECIST&nbsp;<span style={{ color: RECIST_OPTIONS.find(o=>o.code===recistScore)?.color, fontWeight: 700 }}>{recistScore}</span></>}
+                    {gad7Total !== null && <> · GAD-7&nbsp;<span style={{ color: gad7Level?.color, fontWeight: 700 }}>{gad7Total}</span></>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">{saved ? "Запись сохранена ✓" : "Заполните шкалы и сохраните"}</p>
                 </div>
