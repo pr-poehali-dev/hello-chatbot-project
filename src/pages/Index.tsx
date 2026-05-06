@@ -1,27 +1,22 @@
 import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
-type Section = "home" | "tracker" | "calendar" | "reference";
+type Section = "home" | "tracker" | "calendar" | "reference" | "diary";
 
 // Симптомы с градацией интенсивности (субъективно оцениваемые / функционально значимые)
 // Вес по интенсивности: 1-2 → 0 баллов, 3 → 0.5, 4 → 1.0, 5 → 2.0
+// Только симптомы, напрямую влияющие на способность к самообслуживанию (ECOG)
 const GRADED_SYMPTOMS = new Set([
-  "Слабость", "Усталость", "Снижение аппетита",
-  "Одышка", "Кашель", "Кашель с мокротой", "Боль в груди", "Свистящее дыхание",
-  "Учащённое сердцебиение", "Отёки ног", "Головокружение",
-  "Тошнота", "Рвота", "Боль в животе", "Диарея", "Запор", "Изжога", "Вздутие живота",
-  "Головная боль", "Нарушение сна", "Тревожность", "Раздражительность",
+  "Слабость", "Усталость",
+  "Одышка", "Боль в груди",
+  "Отёки ног", "Головокружение",
+  "Тошнота", "Рвота", "Боль в животе", "Диарея",
+  "Нарушение сна", "Головная боль",
   "Боль в суставах", "Боль в спине", "Боль в мышцах", "Ограничение подвижности",
 ]);
 
-// Бинарные симптомы (сам факт наличия = 1 балл, без градации)
-// Кровохарканье, обмороки и т.п. — клинически значимы независимо от интенсивности
 const BINARY_SYMPTOMS = new Set([
-  "Потеря веса", "Повышенная температура", "Ночная потливость",
-  "Кровохарканье",
-  "Перебои в работе сердца", "Обмороки",
-  "Онемение конечностей", "Нарушение памяти",
-  "Отёк суставов",
+  "Снижение аппетита", "Потеря веса", "Повышенная температура",
 ]);
 
 // Шкала нормирована на 10 баллов для удобства восприятия
@@ -30,33 +25,23 @@ const MAX_SCORE = 10;
 const SYMPTOM_GROUPS: { title: string; symptoms: string[] }[] = [
   {
     title: "Общее состояние",
-    // лёгкие → тяжёлые: усталость → слабость → аппетит → температура → ночная потливость → потеря веса
-    symptoms: ["Усталость", "Слабость", "Снижение аппетита", "Повышенная температура", "Ночная потливость", "Потеря веса"],
+    symptoms: ["Усталость", "Слабость", "Снижение аппетита", "Потеря веса", "Повышенная температура"],
   },
   {
-    title: "Дыхание",
-    // лёгкие → тяжёлые: кашель → с мокротой → свистящее → одышка → боль в груди → кровохарканье
-    symptoms: ["Кашель", "Кашель с мокротой", "Свистящее дыхание", "Одышка", "Боль в груди", "Кровохарканье"],
-  },
-  {
-    title: "Сердечно-сосудистые",
-    // лёгкие → тяжёлые: сердцебиение → отёки → головокружение → перебои → обмороки
-    symptoms: ["Учащённое сердцебиение", "Отёки ног", "Головокружение", "Перебои в работе сердца", "Обмороки"],
+    title: "Дыхание и сердце",
+    symptoms: ["Одышка", "Боль в груди", "Отёки ног", "Головокружение"],
   },
   {
     title: "Пищеварение",
-    // лёгкие → тяжёлые: изжога → вздутие → запор → диарея → тошнота → рвота → боль в животе
-    symptoms: ["Изжога", "Вздутие живота", "Запор", "Диарея", "Тошнота", "Рвота", "Боль в животе"],
+    symptoms: ["Тошнота", "Рвота", "Диарея", "Боль в животе"],
   },
   {
-    title: "Нервная система",
-    // лёгкие → тяжёлые: раздражительность → тревожность → нарушение сна → головная боль → нарушение памяти → онемение
-    symptoms: ["Раздражительность", "Тревожность", "Нарушение сна", "Головная боль", "Нарушение памяти", "Онемение конечностей"],
+    title: "Болевой синдром и подвижность",
+    symptoms: ["Боль в мышцах", "Боль в суставах", "Боль в спине", "Ограничение подвижности"],
   },
   {
-    title: "Опорно-двигательный аппарат",
-    // лёгкие → тяжёлые: боль в мышцах → боль в суставах → отёк суставов → боль в спине → ограничение подвижности
-    symptoms: ["Боль в мышцах", "Боль в суставах", "Отёк суставов", "Боль в спине", "Ограничение подвижности"],
+    title: "Сон и самочувствие",
+    symptoms: ["Нарушение сна", "Головная боль"],
   },
 ];
 
@@ -516,6 +501,41 @@ export default function Index() {
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 8);
 
+  // ── Diary state ──
+  interface DiaryEntry {
+    id: string;
+    date: string;
+    rating: number;
+    text: string;
+  }
+  const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>([]);
+  const [diaryRating, setDiaryRating] = useState<number | null>(null);
+  const [diaryText, setDiaryText] = useState("");
+  const [diarySaved, setDiarySaved] = useState(false);
+
+  const saveDiaryEntry = () => {
+    if (diaryRating === null) return;
+    const entry: DiaryEntry = {
+      id: Date.now().toString(),
+      date: todayKey,
+      rating: diaryRating,
+      text: diaryText.trim(),
+    };
+    setDiaryEntries(prev => {
+      const filtered = prev.filter(e => e.date !== todayKey);
+      return [entry, ...filtered].sort((a, b) => b.date.localeCompare(a.date));
+    });
+    setDiarySaved(true);
+  };
+
+  const DIARY_RATINGS = [
+    { value: 1, emoji: "😔", label: "Очень плохо" },
+    { value: 2, emoji: "😕", label: "Плохо" },
+    { value: 3, emoji: "😐", label: "Нормально" },
+    { value: 4, emoji: "🙂", label: "Хорошо" },
+    { value: 5, emoji: "😊", label: "Отлично" },
+  ];
+
   const toggleSymptom = (symptom: string) => {
     setSelected((prev) => {
       if (prev[symptom]) {
@@ -599,7 +619,8 @@ export default function Index() {
 
   const navItems: { key: Section; label: string }[] = [
     { key: "home", label: "Главная" },
-    { key: "tracker", label: "Трекер симптомов" },
+    { key: "tracker", label: "Трекер" },
+    { key: "diary", label: "Дневник" },
     { key: "calendar", label: "Календарь" },
     { key: "reference", label: "Справочник" },
   ];
@@ -647,8 +668,7 @@ export default function Index() {
               <em>ваш надёжный гид</em>
             </h1>
             <p className="text-xl text-muted-foreground max-w-xl leading-relaxed mb-10">
-              Инструмент для структурированного сбора жалоб, оценки функционального
-              статуса по шкале ECOG и информирования пациентов об онкологических заболеваниях.
+              Инструмент для структурированного контроля симптомов, оценки боли и психоэмоционального состояния, ведения дневника самочувствия и информирования пациентов.
             </p>
             <div className="flex items-center gap-4 flex-wrap">
               <button
@@ -656,6 +676,12 @@ export default function Index() {
                 className="px-7 py-3.5 bg-foreground text-background rounded-xl font-medium hover:opacity-85 transition-opacity"
               >
                 Открыть трекер
+              </button>
+              <button
+                onClick={() => setSection("diary")}
+                className="px-7 py-3.5 border border-border rounded-xl font-medium text-foreground hover:bg-secondary transition-colors"
+              >
+                Дневник
               </button>
               <button
                 onClick={() => setSection("reference")}
@@ -672,13 +698,13 @@ export default function Index() {
             {[
               {
                 icon: "ClipboardList",
-                title: "Трекер симптомов",
-                desc: "Выбирайте симптомы из готового списка и указывайте интенсивность. Никакого ввода вручную.",
+                title: "Трекер шкал",
+                desc: "Оценка функционального статуса ECOG, боли по ВАШ и тревожности по GAD-7 — всё в одном месте.",
               },
               {
-                icon: "BarChart2",
-                title: "Оценка ECOG",
-                desc: "Каждый отмеченный симптом учитывается в расчёте функционального статуса пациента по шкале ECOG.",
+                icon: "NotebookPen",
+                title: "Дневник самочувствия",
+                desc: "Короткие ежедневные записи и общая оценка дня. Помогает врачу видеть динамику между визитами.",
               },
               {
                 icon: "BookOpen",
@@ -698,29 +724,6 @@ export default function Index() {
                 <p className="text-muted-foreground leading-relaxed text-sm">{f.desc}</p>
               </div>
             ))}
-          </section>
-
-          <div className="border-t border-border" />
-
-          {/* ECOG preview */}
-          <section className="py-16">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-6">
-              Шкала ECOG / ВОЗ
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-              {ECOG_LEVELS.map((lvl) => (
-                <div key={lvl.score} className="bg-card border border-border rounded-xl p-4">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold mb-3"
-                    style={{ backgroundColor: lvl.color }}
-                  >
-                    {lvl.score}
-                  </div>
-                  <p className="font-semibold text-foreground text-sm mb-1">{lvl.label}</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{lvl.desc}</p>
-                </div>
-              ))}
-            </div>
           </section>
 
           <div className="border-t border-border" />
@@ -1659,6 +1662,111 @@ export default function Index() {
               </>
             );
           })()}
+        </main>
+      )}
+
+      {/* ── DIARY ── */}
+      {section === "diary" && (
+        <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
+          <div className="mb-8">
+            <h2 className="font-display text-4xl text-foreground mb-2">Дневник самочувствия</h2>
+            <p className="text-muted-foreground">Короткая запись о том, как прошёл день</p>
+          </div>
+
+          {/* Today's entry form */}
+          <div className="bg-card border border-border rounded-2xl p-6 mb-8">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">
+              Сегодня — {new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
+            </p>
+
+            {/* Rating */}
+            <p className="text-sm font-medium text-foreground mb-3">Как прошёл день?</p>
+            <div className="flex gap-3 mb-6">
+              {DIARY_RATINGS.map(r => (
+                <button
+                  key={r.value}
+                  onClick={() => { setDiaryRating(r.value); setDiarySaved(false); }}
+                  className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all ${
+                    diaryRating === r.value
+                      ? "border-foreground bg-foreground/5"
+                      : "border-border hover:border-foreground/30"
+                  }`}
+                >
+                  <span className="text-2xl">{r.emoji}</span>
+                  <span className="text-xs text-muted-foreground leading-tight text-center">{r.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Text */}
+            <p className="text-sm font-medium text-foreground mb-2">Заметки (необязательно)</p>
+            <textarea
+              value={diaryText}
+              onChange={e => { setDiaryText(e.target.value); setDiarySaved(false); }}
+              placeholder="Что беспокоило, что помогло, общие ощущения…"
+              rows={4}
+              className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 placeholder:text-muted-foreground resize-none"
+            />
+
+            <div className="flex items-center justify-between mt-4">
+              {diarySaved ? (
+                <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
+                  <Icon name="CheckCircle" size={16} />
+                  Запись сохранена
+                </div>
+              ) : <span />}
+              <button
+                onClick={saveDiaryEntry}
+                disabled={diaryRating === null || diarySaved}
+                className="px-5 py-2.5 bg-foreground text-background rounded-xl text-sm font-medium hover:opacity-85 transition-opacity disabled:opacity-40"
+              >
+                Сохранить запись
+              </button>
+            </div>
+          </div>
+
+          {/* History */}
+          {diaryEntries.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">История записей</p>
+              <div className="space-y-3">
+                {diaryEntries.map(entry => {
+                  const r = DIARY_RATINGS.find(x => x.value === entry.rating)!;
+                  const [y, m, d] = entry.date.split("-");
+                  const dateStr = new Date(+y, +m - 1, +d).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+                  return (
+                    <div key={entry.id} className="bg-card border border-border rounded-2xl p-4 flex items-start gap-4">
+                      <div className="w-11 h-11 bg-secondary rounded-xl flex items-center justify-center flex-shrink-0 text-2xl">
+                        {r.emoji}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-sm font-semibold text-foreground">{dateStr}</p>
+                          <span className="text-xs text-muted-foreground">{r.label}</span>
+                        </div>
+                        {entry.text && (
+                          <p className="text-sm text-muted-foreground leading-relaxed">{entry.text}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setDiaryEntries(prev => prev.filter(e => e.id !== entry.id))}
+                        className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 mt-0.5"
+                      >
+                        <Icon name="X" size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {diaryEntries.length === 0 && (
+            <div className="text-center py-10 text-muted-foreground">
+              <Icon name="NotebookPen" size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Записей пока нет. Сделайте первую запись выше.</p>
+            </div>
+          )}
         </main>
       )}
 
