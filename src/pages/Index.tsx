@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
 type Section = "home" | "tracker" | "calendar" | "reference";
@@ -130,6 +130,37 @@ function toKey(y: number, m: number, d: number) { return `${y}-${pad(m+1)}-${pad
 function today() {
   const d = new Date();
   return toKey(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+// ── TRACKER SCALES DATA ──
+
+const VAS_STEPS = [
+  { value: 0,  emoji: "😊", label: "Нет боли",         color: "#22c55e" },
+  { value: 1,  emoji: "🙂", label: "Почти незаметна",  color: "#4ade80" },
+  { value: 2,  emoji: "😐", label: "Очень лёгкая",     color: "#86efac" },
+  { value: 3,  emoji: "😕", label: "Лёгкая",           color: "#fbbf24" },
+  { value: 4,  emoji: "😟", label: "Умеренная",        color: "#f59e0b" },
+  { value: 5,  emoji: "😣", label: "Средняя",          color: "#f97316" },
+  { value: 6,  emoji: "😖", label: "Сильная",          color: "#ef4444" },
+  { value: 7,  emoji: "😫", label: "Очень сильная",    color: "#dc2626" },
+  { value: 8,  emoji: "😭", label: "Мучительная",      color: "#b91c1c" },
+  { value: 9,  emoji: "😱", label: "Невыносимая",      color: "#991b1b" },
+  { value: 10, emoji: "🤯", label: "Максимальная",     color: "#7f1d1d" },
+];
+
+const RECIST_OPTIONS = [
+  { code: "CR",  label: "Полный ответ",           desc: "Исчезновение всех целевых очагов",                         color: "#22c55e" },
+  { code: "PR",  label: "Частичный ответ",        desc: "Уменьшение суммы диаметров ≥30%",                         color: "#4ade80" },
+  { code: "SD",  label: "Стабилизация",           desc: "Изменения не достигают CR/PR/PD",                         color: "#f59e0b" },
+  { code: "PD",  label: "Прогрессирование",       desc: "Увеличение суммы диаметров ≥20% или новые очаги",         color: "#ef4444" },
+  { code: "NE",  label: "Не оценивалось",         desc: "Недостаточно данных для оценки ответа",                   color: "#94a3b8" },
+];
+
+interface ScaleRecord {
+  date: string;
+  ecog: number;
+  vas: number | null;
+  recist: string | null;
 }
 
 interface NosologySection {
@@ -482,6 +513,44 @@ export default function Index() {
   const { score: ecogScore, points: ecogPoints, percent: ecogPercent } = calcEcog(selected);
   const ecogInfo = ECOG_LEVELS[ecogScore];
 
+  // ── Tracker pages state ──
+  const [trackerPage, setTrackerPage] = useState(0);
+  const trackerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+
+  const [vasScore, setVasScore] = useState<number | null>(null);
+  const [recistScore, setRecistScore] = useState<string | null>(null);
+  const [scaleRecords, setScaleRecords] = useState<ScaleRecord[]>([]);
+
+  const TRACKER_PAGES = ["ECOG / Симптомы", "Боль (ВАШ)", "RECIST", "Графики"];
+
+  const goToPage = (idx: number) => {
+    setTrackerPage(Math.max(0, Math.min(TRACKER_PAGES.length - 1, idx)));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) goToPage(trackerPage + (diff > 0 ? 1 : -1));
+  };
+
+  const handleSaveAll = () => {
+    const rec: ScaleRecord = {
+      date: todayKey,
+      ecog: ecogScore,
+      vas: vasScore,
+      recist: recistScore,
+    };
+    setScaleRecords((prev) => {
+      const filtered = prev.filter((r) => r.date !== todayKey);
+      return [...filtered, rec].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    setSaved(true);
+  };
+
   const handleSave = () => setSaved(true);
   const handleReset = () => { setSelected({}); setSaved(false); };
 
@@ -646,176 +715,365 @@ export default function Index() {
       {/* ── TRACKER ── */}
       {section === "tracker" && (
         <main className="max-w-4xl mx-auto px-6 py-12 animate-fade-in">
-          <div className="flex items-start justify-between mb-8">
+
+          {/* Header */}
+          <div className="flex items-start justify-between mb-6">
             <div>
-              <h2 className="font-display text-4xl text-foreground mb-2">Трекер симптомов</h2>
-              <p className="text-muted-foreground">Отметьте всё, что беспокоит пациента сегодня</p>
+              <h2 className="font-display text-4xl text-foreground mb-1">Трекер шкал</h2>
+              <p className="text-muted-foreground text-sm">Свайп влево/вправо для переключения шкал</p>
             </div>
-            {selectedCount > 0 && (
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-sm text-muted-foreground">
-                  Отмечено: <strong className="text-foreground">{selectedCount}</strong>
-                </span>
-                <button
-                  onClick={handleReset}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
-                >
-                  Сбросить
-                </button>
+            <button
+              onClick={() => { setSaved(false); }}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-1"
+            >
+              <Icon name="RotateCcw" size={14} />
+              Сбросить
+            </button>
+          </div>
+
+          {/* Page tabs */}
+          <div className="flex gap-1 bg-secondary rounded-xl p-1 mb-6">
+            {TRACKER_PAGES.map((name, i) => (
+              <button
+                key={name}
+                onClick={() => goToPage(i)}
+                className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${
+                  trackerPage === i
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+
+          {/* Swipeable area */}
+          <div
+            ref={trackerRef}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="overflow-hidden"
+          >
+            {/* ── PAGE 1: ECOG + Симптомы ── */}
+            {trackerPage === 0 && (
+              <div className="animate-fade-in">
+                {/* ECOG Panel */}
+                <div className="bg-card border border-border rounded-2xl p-6 mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+                        Функциональный статус ECOG
+                      </p>
+                      <div className="flex items-baseline gap-3">
+                        <span className="font-display text-5xl font-bold" style={{ color: ecogInfo.color }}>{ecogScore}</span>
+                        <span className="font-semibold text-foreground text-lg">{ecogInfo.label}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-sm">{ecogInfo.desc}</p>
+                    </div>
+                    <div className="hidden md:flex flex-col items-end gap-1.5">
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-foreground">{ecogPoints.toFixed(1)}</p>
+                        <p className="text-xs text-muted-foreground">баллов из {MAX_SCORE.toFixed(0)}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{selectedCount} симптомов</span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(ecogPercent, selectedCount > 0 ? 2 : 0)}%`, backgroundColor: ecogInfo.color }} />
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    {ECOG_LEVELS.map((lvl) => (
+                      <div key={lvl.score} className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full transition-all" style={{ backgroundColor: lvl.color, opacity: ecogScore >= lvl.score ? 1 : 0.25, transform: ecogScore === lvl.score ? "scale(1.4)" : "scale(1)" }} />
+                        <span className="text-xs" style={{ color: ecogScore === lvl.score ? lvl.color : undefined, fontWeight: ecogScore === lvl.score ? 600 : 400 }}>{lvl.score}</span>
+                      </div>
+                    ))}
+                    <span className="text-xs text-muted-foreground ml-2 self-center">ECOG</span>
+                  </div>
+                </div>
+
+                {/* Symptom groups */}
+                <div className="space-y-10">
+                  {SYMPTOM_GROUPS.map((group) => (
+                    <div key={group.title}>
+                      <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">{group.title}</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {group.symptoms.map((symptom) => {
+                          const isSelected = !!selected[symptom];
+                          const isBinary = BINARY_SYMPTOMS.has(symptom);
+                          const currentWeight = isSelected ? symptomWeight(symptom, selected[symptom]) : 0;
+                          return (
+                            <div key={symptom} className="flex flex-col">
+                              <button
+                                onClick={() => toggleSymptom(symptom)}
+                                className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${isSelected ? "bg-foreground text-background border-foreground" : "bg-card text-foreground border-border hover:border-foreground/40"}`}
+                              >
+                                {isSelected && <Icon name="Check" size={12} className="inline mr-1.5 -mt-0.5" />}
+                                {symptom}
+                                {!isSelected && isBinary && <span className="ml-1.5 text-xs text-muted-foreground font-normal">·1</span>}
+                              </button>
+                              {isSelected && isBinary && <p className="text-xs text-muted-foreground mt-1.5 px-1">+1.0 балл (факт наличия)</p>}
+                              {isSelected && !isBinary && (
+                                <div className="mt-2 px-1 animate-fade-in">
+                                  <div className="flex items-center gap-1">
+                                    {[1, 2, 3, 4, 5].map((v) => (
+                                      <button key={v} onClick={() => setIntensity(symptom, v)} className={`w-6 h-6 rounded-full text-xs font-semibold transition-all ${selected[symptom] >= v ? "bg-foreground text-background" : "bg-secondary text-muted-foreground hover:bg-border"}`}>{v}</button>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1 pl-0.5">
+                                    {INTENSITY_LABELS[selected[symptom]]} · <span className="font-medium text-foreground">{currentWeight === 0 ? "0 баллов" : `+${currentWeight} балл${currentWeight === 2 ? "а" : ""}`}</span>
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── PAGE 2: ВАШ Боль ── */}
+            {trackerPage === 1 && (
+              <div className="animate-fade-in">
+                <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Визуальная аналоговая шкала боли</p>
+                  <p className="text-sm text-muted-foreground mb-6">Выберите число, соответствующее вашей боли прямо сейчас</p>
+
+                  {/* Selected display */}
+                  {vasScore !== null ? (
+                    <div className="flex items-center gap-4 mb-6 p-4 rounded-2xl" style={{ backgroundColor: VAS_STEPS[vasScore].color + "15" }}>
+                      <span className="text-5xl">{VAS_STEPS[vasScore].emoji}</span>
+                      <div>
+                        <p className="font-display text-4xl font-bold" style={{ color: VAS_STEPS[vasScore].color }}>{vasScore}</p>
+                        <p className="font-semibold text-foreground">{VAS_STEPS[vasScore].label}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 mb-6 p-4 rounded-2xl bg-secondary">
+                      <span className="text-3xl opacity-40">🤔</span>
+                      <p className="text-muted-foreground text-sm">Нажмите на цифру ниже, чтобы отметить интенсивность боли</p>
+                    </div>
+                  )}
+
+                  {/* VAS scale buttons */}
+                  <div className="grid grid-cols-11 gap-1.5">
+                    {VAS_STEPS.map((step) => (
+                      <button
+                        key={step.value}
+                        onClick={() => setVasScore(step.value)}
+                        className={`aspect-square rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all border-2 ${
+                          vasScore === step.value ? "border-current scale-110 shadow-md" : "border-transparent hover:scale-105"
+                        }`}
+                        style={{
+                          backgroundColor: step.color + (vasScore === step.value ? "30" : "15"),
+                          borderColor: vasScore === step.value ? step.color : "transparent",
+                        }}
+                      >
+                        <span className="text-lg leading-none">{step.emoji}</span>
+                        <span className="text-xs font-bold" style={{ color: step.color }}>{step.value}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Labels */}
+                  <div className="flex justify-between mt-3 px-1">
+                    <span className="text-xs text-muted-foreground">Нет боли</span>
+                    <span className="text-xs text-muted-foreground">Невыносимая</span>
+                  </div>
+                </div>
+
+                {/* VAS description table */}
+                <div className="bg-card border border-border rounded-2xl p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Интерпретация шкалы</p>
+                  <div className="space-y-2">
+                    {[
+                      { range: "0", desc: "Боль отсутствует полностью" },
+                      { range: "1–3", desc: "Лёгкая — не мешает повседневной деятельности" },
+                      { range: "4–6", desc: "Умеренная — требует коррекции анальгезии" },
+                      { range: "7–9", desc: "Сильная — значительно ограничивает активность" },
+                      { range: "10", desc: "Максимальная — нестерпимая боль, экстренная помощь" },
+                    ].map((row) => (
+                      <div key={row.range} className="flex items-start gap-3">
+                        <span className="text-xs font-bold text-foreground w-8 flex-shrink-0 pt-0.5">{row.range}</span>
+                        <span className="text-sm text-muted-foreground">{row.desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── PAGE 3: RECIST ── */}
+            {trackerPage === 2 && (
+              <div className="animate-fade-in">
+                <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Критерии RECIST 1.1</p>
+                  <p className="text-sm text-muted-foreground mb-6">Оценка ответа опухоли на системное лечение по данным визуализации</p>
+
+                  <div className="space-y-3">
+                    {RECIST_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.code}
+                        onClick={() => setRecistScore(opt.code)}
+                        className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 text-left transition-all ${
+                          recistScore === opt.code ? "border-current" : "border-border hover:border-foreground/20"
+                        }`}
+                        style={{
+                          borderColor: recistScore === opt.code ? opt.color : undefined,
+                          backgroundColor: recistScore === opt.code ? opt.color + "10" : undefined,
+                        }}
+                      >
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: opt.color + "20" }}>
+                          <span className="text-sm font-bold" style={{ color: opt.color }}>{opt.code}</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-foreground mb-0.5">{opt.label}</p>
+                          <p className="text-sm text-muted-foreground leading-relaxed">{opt.desc}</p>
+                        </div>
+                        {recistScore === opt.code && (
+                          <div className="flex-shrink-0 mt-1">
+                            <Icon name="CheckCircle" size={20} style={{ color: opt.color } as React.CSSProperties} />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-secondary rounded-2xl px-5 py-4 flex items-start gap-3">
+                  <Icon name="Info" size={16} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    RECIST 1.1 (Response Evaluation Criteria in Solid Tumors) — международный стандарт оценки ответа на лечение при солидных опухолях. Требует сопоставления данных КТ/МРТ с исходными измерениями.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ── PAGE 4: Графики ── */}
+            {trackerPage === 3 && (
+              <div className="animate-fade-in">
+                {scaleRecords.length === 0 ? (
+                  <div className="bg-card border border-border rounded-2xl p-12 text-center">
+                    <div className="w-14 h-14 bg-secondary rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <Icon name="BarChart2" size={24} className="text-muted-foreground" />
+                    </div>
+                    <p className="font-semibold text-foreground mb-2">Нет данных для графиков</p>
+                    <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                      Заполните шкалы на страницах 1–3 и нажмите «Сохранить запись» — точка появится на графике
+                    </p>
+                    <button onClick={() => goToPage(0)} className="mt-6 px-5 py-2.5 bg-foreground text-background rounded-xl text-sm font-medium hover:opacity-85 transition-opacity">
+                      Перейти к шкалам
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* ECOG chart */}
+                    {(() => {
+                      const maxVal = 4;
+                      return (
+                        <div className="bg-card border border-border rounded-2xl p-5">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Динамика ECOG</p>
+                          <div className="flex gap-2 items-end h-32">
+                            {/* Y axis */}
+                            <div className="flex flex-col justify-between h-full text-right pr-2">
+                              {[4,3,2,1,0].map(v => (
+                                <span key={v} className="text-xs text-muted-foreground leading-none">{v}</span>
+                              ))}
+                            </div>
+                            {/* Bars */}
+                            <div className="flex-1 flex items-end gap-2 border-l border-b border-border h-full pl-2 pb-0 relative">
+                              {scaleRecords.map((rec) => {
+                                const pct = ((maxVal - rec.ecog) / maxVal) * 100;
+                                const color = ECOG_LEVELS[rec.ecog]?.color ?? "#94a3b8";
+                                const [,m,d] = rec.date.split("-");
+                                return (
+                                  <div key={rec.date} className="flex flex-col items-center gap-1 flex-1 min-w-0 h-full justify-end">
+                                    <span className="text-xs font-bold" style={{ color }}>{rec.ecog}</span>
+                                    <div className="w-full rounded-t-lg transition-all" style={{ height: `${Math.max(pct, 5)}%`, backgroundColor: color + "80", border: `1.5px solid ${color}` }} />
+                                    <span className="text-xs text-muted-foreground truncate w-full text-center">{d}.{m}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* VAS chart */}
+                    {scaleRecords.some(r => r.vas !== null) && (() => {
+                      const maxVal = 10;
+                      return (
+                        <div className="bg-card border border-border rounded-2xl p-5">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Динамика боли (ВАШ)</p>
+                          <div className="flex gap-2 items-end h-32">
+                            <div className="flex flex-col justify-between h-full text-right pr-2">
+                              {[10,8,6,4,2,0].map(v => <span key={v} className="text-xs text-muted-foreground leading-none">{v}</span>)}
+                            </div>
+                            <div className="flex-1 flex items-end gap-2 border-l border-b border-border h-full pl-2 relative">
+                              {scaleRecords.filter(r => r.vas !== null).map((rec) => {
+                                const v = rec.vas!;
+                                const pct = (v / maxVal) * 100;
+                                const color = VAS_STEPS[v].color;
+                                const [,m,d] = rec.date.split("-");
+                                return (
+                                  <div key={rec.date} className="flex flex-col items-center gap-1 flex-1 min-w-0 h-full justify-end">
+                                    <span className="text-xs font-bold" style={{ color }}>{v}</span>
+                                    <div className="w-full rounded-t-lg transition-all" style={{ height: `${Math.max(pct, 5)}%`, backgroundColor: color + "80", border: `1.5px solid ${color}` }} />
+                                    <span className="text-xs text-muted-foreground truncate w-full text-center">{d}.{m}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* RECIST timeline */}
+                    {scaleRecords.some(r => r.recist !== null) && (
+                      <div className="bg-card border border-border rounded-2xl p-5">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Динамика ответа (RECIST)</p>
+                        <div className="flex items-center gap-3 overflow-x-auto pb-1">
+                          {scaleRecords.filter(r => r.recist !== null).map((rec, i, arr) => {
+                            const opt = RECIST_OPTIONS.find(o => o.code === rec.recist)!;
+                            const [,m,d] = rec.date.split("-");
+                            return (
+                              <div key={rec.date} className="flex items-center gap-3 flex-shrink-0">
+                                <div className="flex flex-col items-center gap-1.5">
+                                  <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: opt.color + "20" }}>
+                                    <span className="text-xs font-bold" style={{ color: opt.color }}>{opt.code}</span>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground">{d}.{m}</span>
+                                </div>
+                                {i < arr.length - 1 && <Icon name="ArrowRight" size={14} className="text-muted-foreground flex-shrink-0" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* ECOG Panel */}
-          <div className="bg-card border border-border rounded-2xl p-6 mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
-                  Функциональный статус ECOG
-                </p>
-                <div className="flex items-baseline gap-3">
-                  <span
-                    className="font-display text-5xl font-bold"
-                    style={{ color: ecogInfo.color }}
-                  >
-                    {ecogScore}
-                  </span>
-                  <span className="font-semibold text-foreground text-lg">{ecogInfo.label}</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1 max-w-sm">{ecogInfo.desc}</p>
-              </div>
-              <div className="hidden md:flex flex-col items-end gap-1.5">
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-foreground">{ecogPoints.toFixed(1)}</p>
-                  <p className="text-xs text-muted-foreground">баллов из {MAX_SCORE.toFixed(0)}</p>
-                </div>
-                <span className="text-xs text-muted-foreground">{selectedCount} симптомов отмечено</span>
-              </div>
-            </div>
-
-            {/* Progress bar */}
-            <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.max(ecogPercent, selectedCount > 0 ? 2 : 0)}%`,
-                  backgroundColor: ecogInfo.color,
-                }}
-              />
-            </div>
-
-            {/* ECOG dots */}
-            <div className="flex gap-2 mt-3">
-              {ECOG_LEVELS.map((lvl) => (
-                <div
-                  key={lvl.score}
-                  className="flex items-center gap-1.5"
-                >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full transition-all"
-                    style={{
-                      backgroundColor: lvl.color,
-                      opacity: ecogScore >= lvl.score ? 1 : 0.25,
-                      transform: ecogScore === lvl.score ? "scale(1.4)" : "scale(1)",
-                    }}
-                  />
-                  <span
-                    className="text-xs"
-                    style={{
-                      color: ecogScore === lvl.score ? lvl.color : undefined,
-                      fontWeight: ecogScore === lvl.score ? 600 : 400,
-                    }}
-                  >
-                    {lvl.score}
-                  </span>
-                </div>
-              ))}
-              <span className="text-xs text-muted-foreground ml-2 self-center">ECOG</span>
-            </div>
-          </div>
-
-          {/* Symptom groups */}
-          <div className="space-y-10">
-            {SYMPTOM_GROUPS.map((group) => (
-              <div key={group.title}>
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">
-                  {group.title}
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {group.symptoms.map((symptom) => {
-                    const isSelected = !!selected[symptom];
-                    const isBinary = BINARY_SYMPTOMS.has(symptom);
-                    const currentWeight = isSelected ? symptomWeight(symptom, selected[symptom]) : 0;
-                    return (
-                      <div key={symptom} className="flex flex-col">
-                        <button
-                          onClick={() => toggleSymptom(symptom)}
-                          className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${
-                            isSelected
-                              ? "bg-foreground text-background border-foreground"
-                              : "bg-card text-foreground border-border hover:border-foreground/40"
-                          }`}
-                        >
-                          {isSelected && (
-                            <Icon name="Check" size={12} className="inline mr-1.5 -mt-0.5" />
-                          )}
-                          {symptom}
-                          {!isSelected && isBinary && (
-                            <span className="ml-1.5 text-xs text-muted-foreground font-normal">·1</span>
-                          )}
-                        </button>
-                        {isSelected && isBinary && (
-                          <p className="text-xs text-muted-foreground mt-1.5 px-1">
-                            +1.0 балл (факт наличия)
-                          </p>
-                        )}
-                        {isSelected && !isBinary && (
-                          <div className="mt-2 px-1 animate-fade-in">
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((v) => (
-                                <button
-                                  key={v}
-                                  onClick={() => setIntensity(symptom, v)}
-                                  className={`w-6 h-6 rounded-full text-xs font-semibold transition-all ${
-                                    selected[symptom] >= v
-                                      ? "bg-foreground text-background"
-                                      : "bg-secondary text-muted-foreground hover:bg-border"
-                                  }`}
-                                >
-                                  {v}
-                                </button>
-                              ))}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1 pl-0.5">
-                              {INTENSITY_LABELS[selected[symptom]]}
-                              {" · "}
-                              <span className="font-medium text-foreground">
-                                {currentWeight === 0 ? "0 баллов" : `+${currentWeight} балл${currentWeight === 2 ? "а" : ""}`}
-                              </span>
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-
           {/* Save panel */}
-          {selectedCount > 0 && (
-            <div className="sticky bottom-6 mt-12">
+          {trackerPage < 3 && (
+            <div className="sticky bottom-6 mt-10">
               <div className="bg-card border border-border rounded-2xl px-6 py-4 flex items-center justify-between shadow-lg shadow-foreground/5">
                 <div>
-                  <p className="font-medium text-foreground">
-                    {selectedCount}&nbsp;
-                    {selectedCount === 1 ? "симптом" : selectedCount < 5 ? "симптома" : "симптомов"} · {ecogPoints.toFixed(1)} балл. · ECOG&nbsp;
-                    <span style={{ color: ecogInfo.color, fontWeight: 600 }}>{ecogScore}</span>
+                  <p className="font-medium text-foreground text-sm">
+                    ECOG&nbsp;<span style={{ color: ecogInfo.color, fontWeight: 700 }}>{ecogScore}</span>
+                    {vasScore !== null && <> · ВАШ&nbsp;<span style={{ color: VAS_STEPS[vasScore].color, fontWeight: 700 }}>{vasScore}</span></>}
+                    {recistScore && <> · RECIST&nbsp;<span style={{ color: RECIST_OPTIONS.find(o=>o.code===recistScore)?.color, fontWeight: 700 }}>{recistScore}</span></>}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {saved ? "Запись сохранена ✓" : "Готово к сохранению"}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{saved ? "Запись сохранена ✓" : "Заполните шкалы и сохраните"}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   {saved && (
@@ -825,7 +1083,7 @@ export default function Index() {
                     </div>
                   )}
                   <button
-                    onClick={handleSave}
+                    onClick={handleSaveAll}
                     disabled={saved}
                     className="px-5 py-2.5 bg-foreground text-background rounded-xl text-sm font-medium hover:opacity-85 transition-opacity disabled:opacity-40"
                   >
