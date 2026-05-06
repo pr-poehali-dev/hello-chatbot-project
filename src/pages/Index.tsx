@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
-type Section = "home" | "tracker" | "calendar" | "reference" | "diary";
+type Section = "home" | "tracker" | "calendar" | "reference" | "diary" | "tmk" | "ai" | "anxiety";
 
 // Симптомы с градацией интенсивности (субъективно оцениваемые / функционально значимые)
 // Вес по интенсивности: 1-2 → 0 баллов, 3 → 0.5, 4 → 1.0, 5 → 2.0
@@ -120,17 +120,17 @@ function today() {
 // ── TRACKER SCALES DATA ──
 
 const VAS_STEPS = [
-  { value: 0,  emoji: "😊", label: "Нет боли",         color: "#22c55e" },
-  { value: 1,  emoji: "🙂", label: "Почти незаметна",  color: "#4ade80" },
-  { value: 2,  emoji: "😐", label: "Очень лёгкая",     color: "#86efac" },
-  { value: 3,  emoji: "😕", label: "Лёгкая",           color: "#fbbf24" },
-  { value: 4,  emoji: "😟", label: "Умеренная",        color: "#f59e0b" },
-  { value: 5,  emoji: "😣", label: "Средняя",          color: "#f97316" },
-  { value: 6,  emoji: "😖", label: "Сильная",          color: "#ef4444" },
-  { value: 7,  emoji: "😫", label: "Очень сильная",    color: "#dc2626" },
-  { value: 8,  emoji: "😭", label: "Мучительная",      color: "#b91c1c" },
-  { value: 9,  emoji: "😱", label: "Невыносимая",      color: "#991b1b" },
-  { value: 10, emoji: "🤯", label: "Максимальная",     color: "#7f1d1d" },
+  { value: 0,  label: "Нет боли",        color: "#22c55e" },
+  { value: 1,  label: "Почти незаметна", color: "#4ade80" },
+  { value: 2,  label: "Очень лёгкая",    color: "#86efac" },
+  { value: 3,  label: "Лёгкая",          color: "#fbbf24" },
+  { value: 4,  label: "Умеренная",       color: "#f59e0b" },
+  { value: 5,  label: "Средняя",         color: "#f97316" },
+  { value: 6,  label: "Сильная",         color: "#ef4444" },
+  { value: 7,  label: "Очень сильная",   color: "#dc2626" },
+  { value: 8,  label: "Мучительная",     color: "#b91c1c" },
+  { value: 9,  label: "Невыносимая",     color: "#991b1b" },
+  { value: 10, label: "Максимальная",    color: "#7f1d1d" },
 ];
 
 // GAD-7 (Generalized Anxiety Disorder 7-item scale)
@@ -529,11 +529,11 @@ export default function Index() {
   };
 
   const DIARY_RATINGS = [
-    { value: 1, emoji: "😔", label: "Очень плохо" },
-    { value: 2, emoji: "😕", label: "Плохо" },
-    { value: 3, emoji: "😐", label: "Нормально" },
-    { value: 4, emoji: "🙂", label: "Хорошо" },
-    { value: 5, emoji: "😊", label: "Отлично" },
+    { value: 1, label: "Очень плохо", color: "#ef4444" },
+    { value: 2, label: "Плохо",       color: "#f97316" },
+    { value: 3, label: "Нормально",   color: "#eab308" },
+    { value: 4, label: "Хорошо",      color: "#84cc16" },
+    { value: 5, label: "Отлично",     color: "#22c55e" },
   ];
 
   const toggleSymptom = (symptom: string) => {
@@ -617,12 +617,15 @@ export default function Index() {
   const handleSave = () => setSaved(true);
   const handleReset = () => { setSelected({}); setSaved(false); };
 
-  const navItems: { key: Section; label: string }[] = [
+  const navItems: { key: Section; label: string; wip?: boolean }[] = [
     { key: "home", label: "Главная" },
     { key: "tracker", label: "Трекер" },
     { key: "diary", label: "Дневник" },
     { key: "calendar", label: "Календарь" },
     { key: "reference", label: "Справочник" },
+    { key: "tmk", label: "ТМК", wip: true },
+    { key: "ai", label: "ИИ-помощник", wip: true },
+    { key: "anxiety", label: "Тревожность", wip: true },
   ];
 
   return (
@@ -639,17 +642,20 @@ export default function Index() {
             </span>
           </div>
           <nav className="flex items-center gap-1">
-            {navItems.map(({ key, label }) => (
+            {navItems.map(({ key, label, wip }) => (
               <button
                 key={key}
                 onClick={() => setSection(key)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   section === key
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 }`}
               >
                 {label}
+                {wip && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full" />
+                )}
               </button>
             ))}
           </nav>
@@ -892,15 +898,17 @@ export default function Index() {
                   {/* Selected display */}
                   {vasScore !== null ? (
                     <div className="flex items-center gap-4 mb-6 p-4 rounded-2xl" style={{ backgroundColor: VAS_STEPS[vasScore].color + "15" }}>
-                      <span className="text-5xl">{VAS_STEPS[vasScore].emoji}</span>
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0" style={{ backgroundColor: VAS_STEPS[vasScore].color }}>
+                        {vasScore}
+                      </div>
                       <div>
-                        <p className="font-display text-4xl font-bold" style={{ color: VAS_STEPS[vasScore].color }}>{vasScore}</p>
-                        <p className="font-semibold text-foreground">{VAS_STEPS[vasScore].label}</p>
+                        <p className="font-semibold text-foreground text-lg">{VAS_STEPS[vasScore].label}</p>
+                        <p className="text-sm text-muted-foreground">Балл по шкале ВАШ</p>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3 mb-6 p-4 rounded-2xl bg-secondary">
-                      <span className="text-3xl opacity-40">🤔</span>
+                      <Icon name="MousePointerClick" size={20} className="text-muted-foreground opacity-60 flex-shrink-0" />
                       <p className="text-muted-foreground text-sm">Нажмите на цифру ниже, чтобы отметить интенсивность боли</p>
                     </div>
                   )}
@@ -911,16 +919,16 @@ export default function Index() {
                       <button
                         key={step.value}
                         onClick={() => setVasScore(step.value)}
-                        className={`aspect-square rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all border-2 ${
-                          vasScore === step.value ? "border-current scale-110 shadow-md" : "border-transparent hover:scale-105"
+                        title={step.label}
+                        className={`aspect-square rounded-xl flex flex-col items-center justify-center transition-all border-2 ${
+                          vasScore === step.value ? "scale-110 shadow-md" : "border-transparent hover:scale-105"
                         }`}
                         style={{
-                          backgroundColor: step.color + (vasScore === step.value ? "30" : "15"),
+                          backgroundColor: step.color + (vasScore === step.value ? "35" : "18"),
                           borderColor: vasScore === step.value ? step.color : "transparent",
                         }}
                       >
-                        <span className="text-lg leading-none">{step.emoji}</span>
-                        <span className="text-xs font-bold" style={{ color: step.color }}>{step.value}</span>
+                        <span className="text-sm font-bold" style={{ color: step.color }}>{step.value}</span>
                       </button>
                     ))}
                   </div>
@@ -1686,13 +1694,12 @@ export default function Index() {
                 <button
                   key={r.value}
                   onClick={() => { setDiaryRating(r.value); setDiarySaved(false); }}
-                  className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all ${
-                    diaryRating === r.value
-                      ? "border-foreground bg-foreground/5"
-                      : "border-border hover:border-foreground/30"
+                  className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border-2 transition-all ${
+                    diaryRating === r.value ? "shadow-sm" : "border-border hover:border-foreground/30"
                   }`}
+                  style={diaryRating === r.value ? { borderColor: r.color, backgroundColor: r.color + "15" } : {}}
                 >
-                  <span className="text-2xl">{r.emoji}</span>
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color }} />
                   <span className="text-xs text-muted-foreground leading-tight text-center">{r.label}</span>
                 </button>
               ))}
@@ -1736,8 +1743,8 @@ export default function Index() {
                   const dateStr = new Date(+y, +m - 1, +d).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
                   return (
                     <div key={entry.id} className="bg-card border border-border rounded-2xl p-4 flex items-start gap-4">
-                      <div className="w-11 h-11 bg-secondary rounded-xl flex items-center justify-center flex-shrink-0 text-2xl">
-                        {r.emoji}
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: r.color + "20" }}>
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: r.color }} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
@@ -1767,6 +1774,66 @@ export default function Index() {
               <p className="text-sm">Записей пока нет. Сделайте первую запись выше.</p>
             </div>
           )}
+        </main>
+      )}
+
+      {/* ── TMK ── */}
+      {section === "tmk" && (
+        <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
+          <div className="mb-8">
+            <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "hsl(var(--accent))" }}>Телемедицина</p>
+            <h2 className="font-display text-4xl text-foreground mb-2">Телемедицинские консультации</h2>
+            <p className="text-muted-foreground">Онлайн-консультации с профильными специалистами без поездки в клинику</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4">
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Icon name="Construction" size={20} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-amber-900 mb-1">Раздел в разработке</p>
+              <p className="text-sm text-amber-700 leading-relaxed">Раздел ТМК находится в активной разработке. Здесь появятся: запись на видеоконсультацию, чат с врачом и загрузка медицинских документов.</p>
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* ── AI ── */}
+      {section === "ai" && (
+        <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
+          <div className="mb-8">
+            <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "hsl(var(--accent))" }}>Искусственный интеллект</p>
+            <h2 className="font-display text-4xl text-foreground mb-2">ИИ-помощник</h2>
+            <p className="text-muted-foreground">Ответы на вопросы об онкологических заболеваниях, лечении и реабилитации</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4">
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Icon name="Construction" size={20} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-amber-900 mb-1">Раздел в разработке</p>
+              <p className="text-sm text-amber-700 leading-relaxed">ИИ-помощник скоро будет доступен. Здесь появится чат, обученный на медицинских источниках: он поможет разобраться в диагнозе, подготовиться к приёму и найти ответы на частые вопросы.</p>
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* ── ANXIETY ── */}
+      {section === "anxiety" && (
+        <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
+          <div className="mb-8">
+            <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "hsl(var(--accent))" }}>Психоэмоциональное состояние</p>
+            <h2 className="font-display text-4xl text-foreground mb-2">Контроль тревожности</h2>
+            <p className="text-muted-foreground">Регулярный мониторинг психоэмоционального состояния пациента</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4">
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Icon name="Construction" size={20} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-amber-900 mb-1">Раздел в разработке</p>
+              <p className="text-sm text-amber-700 leading-relaxed">Раздел контроля тревожности находится в разработке. Здесь появятся расширенные опросники (PHQ-9, GAD-7), визуализация динамики и рекомендации психоонколога.</p>
+            </div>
+          </div>
         </main>
       )}
 
