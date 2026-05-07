@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
-type Section = "home" | "tracker" | "calendar" | "reference" | "diary" | "tmk" | "ai" | "anxiety";
+type Section = "home" | "tracker" | "calendar" | "reference" | "diary" | "tmk" | "ai" | "anxiety" | "about";
 
 // Симптомы с градацией интенсивности (субъективно оцениваемые / функционально значимые)
 // Вес по интенсивности: 1-2 → 0 баллов, 3 → 0.5, 4 → 1.0, 5 → 2.0
@@ -437,6 +437,7 @@ const NOSOLOGIES: Nosology[] = [
 
 export default function Index() {
   const [section, setSection] = useState<Section>("home");
+  const [pdConsent, setPdConsent] = useState(() => localStorage.getItem("pd_consent") === "1");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState(false);
   const [openRef, setOpenRef] = useState<number | null>(null);
@@ -626,10 +627,55 @@ export default function Index() {
     { key: "tmk", label: "ТМК", wip: true },
     { key: "ai", label: "ИИ-помощник", wip: true },
     { key: "anxiety", label: "Тревожность", wip: true },
+    { key: "about", label: "О проекте" },
   ];
+
+  const acceptConsent = () => {
+    localStorage.setItem("pd_consent", "1");
+    setPdConsent(true);
+  };
 
   return (
     <div className="min-h-screen bg-background font-sans">
+      {/* ── PD Consent Banner ── */}
+      {!pdConsent && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 md:p-6">
+          <div className="max-w-3xl mx-auto bg-card border border-border rounded-2xl shadow-xl p-5 md:p-6">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center flex-shrink-0">
+                <Icon name="Shield" size={18} className="text-background" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-foreground mb-1">Обработка персональных данных</p>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                  Используя приложение «Онкопроводник», вы соглашаетесь с{" "}
+                  <button onClick={() => setSection("about")} className="underline underline-offset-2 hover:text-foreground transition-colors">
+                    Политикой конфиденциальности
+                  </button>{" "}
+                  и даёте согласие на обработку персональных данных в соответствии с Федеральным законом № 152-ФЗ «О персональных данных».
+                  Данные используются исключительно для обеспечения работы приложения и не передаются третьим лицам.
+                  Приложение носит информационный характер и не является медицинским изделием или средством диагностики.
+                </p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={acceptConsent}
+                    className="px-5 py-2.5 bg-foreground text-background rounded-xl text-sm font-medium hover:opacity-85 transition-opacity"
+                  >
+                    Принять и продолжить
+                  </button>
+                  <button
+                    onClick={() => setSection("about")}
+                    className="px-5 py-2.5 border border-border rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  >
+                    Подробнее
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-border bg-card sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -1837,10 +1883,125 @@ export default function Index() {
         </main>
       )}
 
+      {/* ── ABOUT ── */}
+      {section === "about" && (
+        <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
+          <div className="mb-10">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Информация о проекте</p>
+            <h2 className="font-display text-4xl text-foreground mb-3">О проекте</h2>
+            <p className="text-muted-foreground leading-relaxed">
+              «Онкопроводник» — информационно-сервисное приложение для пациентов онкологического профиля и медицинских специалистов.
+            </p>
+          </div>
+
+          {/* О сервисе */}
+          <div className="space-y-4 mb-10">
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 bg-secondary rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Icon name="Info" size={16} className="text-foreground" />
+                </div>
+                <p className="font-semibold text-foreground">Назначение сервиса</p>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Приложение предназначено для вспомогательного ведения дневника симптомов, оценки функционального статуса по шкале ECOG, интенсивности боли по ВАШ, мониторинга психоэмоционального состояния и получения общей справочной информации об онкологических заболеваниях.
+              </p>
+            </div>
+
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 bg-secondary rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Icon name="TriangleAlert" size={16} className="text-foreground" />
+                </div>
+                <p className="font-semibold text-foreground">Важное предупреждение</p>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Приложение <strong className="text-foreground">не является медицинским изделием</strong>, средством диагностики или назначения лечения. Вся информация носит справочный и информационный характер. Для постановки диагноза, выбора тактики лечения и интерпретации результатов необходимо обратиться к квалифицированному медицинскому специалисту — врачу-онкологу.
+              </p>
+            </div>
+
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 bg-secondary rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Icon name="Lock" size={16} className="text-foreground" />
+                </div>
+                <p className="font-semibold text-foreground">Персональные данные</p>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Обработка персональных данных осуществляется в соответствии с Федеральным законом от 27.07.2006 № 152-ФЗ «О персональных данных». Данные, вносимые в приложение, хранятся локально на устройстве пользователя и не передаются третьим лицам без явного согласия пользователя. Использование приложения означает ваше согласие на обработку данных в указанных целях.
+              </p>
+            </div>
+
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 bg-secondary rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Icon name="Scale" size={16} className="text-foreground" />
+                </div>
+                <p className="font-semibold text-foreground">Правовая основа</p>
+              </div>
+              <ul className="text-sm text-muted-foreground space-y-1.5 leading-relaxed">
+                <li>• ФЗ № 152-ФЗ «О персональных данных»</li>
+                <li>• ФЗ № 323-ФЗ «Об основах охраны здоровья граждан в Российской Федерации»</li>
+                <li>• ФЗ № 149-ФЗ «Об информации, информационных технологиях и о защите информации»</li>
+                <li>• Приказ Минздрава России № 965н «Об утверждении порядка организации и оказания медицинской помощи с применением телемедицинских технологий»</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Контакты */}
+          <div className="mb-10">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Контакты</p>
+            <div className="bg-card border border-border rounded-2xl divide-y divide-border">
+              {[
+                { icon: "Mail", label: "Электронная почта", value: "info@oncoguide.ru" },
+                { icon: "Globe", label: "Веб-сайт", value: "oncoguide.ru" },
+                { icon: "MapPin", label: "Юридический адрес", value: "Россия, Москва" },
+              ].map(({ icon, label, value }) => (
+                <div key={label} className="flex items-center gap-4 px-5 py-4">
+                  <Icon name={icon as "Mail"} size={16} className="text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                    <p className="text-sm font-medium text-foreground">{value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Версия */}
+          <div className="bg-secondary rounded-2xl px-5 py-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">Версия приложения</p>
+              <p className="text-sm font-medium text-foreground">Онкопроводник 1.0 — Демо</p>
+            </div>
+            <p className="text-xs text-muted-foreground">© 2026</p>
+          </div>
+
+          <div className="mt-6 text-center">
+            <button
+              onClick={acceptConsent}
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+            >
+              {pdConsent ? "Согласие на обработку ПД принято" : "Принять согласие на обработку персональных данных"}
+            </button>
+          </div>
+        </main>
+      )}
+
       <footer className="border-t border-border mt-8">
-        <div className="max-w-5xl mx-auto px-6 py-8 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">© 2026 Онкопроводник — демо-версия</span>
-          <span className="text-sm text-muted-foreground">Для медицинских специалистов</span>
+        <div className="max-w-5xl mx-auto px-6 py-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <span className="text-sm text-muted-foreground">© 2026 Онкопроводник — демо-версия</span>
+            <div className="flex items-center gap-4">
+              <button onClick={() => setSection("about")} className="text-sm text-muted-foreground hover:text-foreground transition-colors">О проекте</button>
+              <button onClick={() => setSection("about")} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Политика конфиденциальности</button>
+              <button onClick={() => setSection("about")} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Контакты</button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
+            Приложение не является медицинским изделием и не предназначено для постановки диагноза или назначения лечения.
+            Используйте информацию как вспомогательный инструмент. Для медицинской помощи обратитесь к врачу.
+          </p>
         </div>
       </footer>
     </div>
