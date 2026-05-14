@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
+import PatientJourney from "@/pages/PatientJourney";
 
-type Section = "home" | "tracker" | "calendar" | "reference" | "diary" | "tmk" | "ai" | "anxiety" | "about";
+type Section = "home" | "tracker" | "calendar" | "reference" | "diary" | "tmk" | "ai" | "anxiety" | "about" | "journey";
 
 // Симптомы с градацией интенсивности (субъективно оцениваемые / функционально значимые)
 // Вес по интенсивности: 1-2 → 0 баллов, 3 → 0.5, 4 → 1.0, 5 → 2.0
@@ -620,6 +621,7 @@ export default function Index() {
 
   const navItems: { key: Section; label: string; wip?: boolean }[] = [
     { key: "home", label: "Главная" },
+    { key: "journey", label: "Путь пациента" },
     { key: "tracker", label: "Трекер" },
     { key: "diary", label: "Дневник" },
     { key: "calendar", label: "Календарь" },
@@ -730,16 +732,16 @@ export default function Index() {
                 Открыть трекер
               </button>
               <button
+                onClick={() => setSection("journey")}
+                className="px-7 py-3.5 border border-border rounded-xl font-medium text-foreground hover:bg-secondary transition-colors"
+              >
+                Путь пациента
+              </button>
+              <button
                 onClick={() => setSection("diary")}
                 className="px-7 py-3.5 border border-border rounded-xl font-medium text-foreground hover:bg-secondary transition-colors"
               >
                 Дневник
-              </button>
-              <button
-                onClick={() => setSection("reference")}
-                className="px-7 py-3.5 border border-border rounded-xl font-medium text-foreground hover:bg-secondary transition-colors"
-              >
-                Справочник
               </button>
             </div>
           </section>
@@ -809,6 +811,9 @@ export default function Index() {
           </section>
         </main>
       )}
+
+      {/* ── JOURNEY ── */}
+      {section === "journey" && <PatientJourney />}
 
       {/* ── TRACKER ── */}
       {section === "tracker" && (
