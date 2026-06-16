@@ -713,101 +713,130 @@ export default function Index() {
       {/* ── HOME ── */}
       {section === "home" && (
         <main className="max-w-5xl mx-auto px-6">
-          <section className="pt-20 pb-16 animate-fade-in">
-            <p className="text-sm font-medium uppercase tracking-widest mb-6" style={{ color: "hsl(var(--accent))" }}>
+          {/* Hero */}
+          <section className="pt-20 pb-14 animate-fade-in">
+            <p className="text-sm font-medium uppercase tracking-widest mb-5" style={{ color: "hsl(var(--accent))" }}>
               Цифровая онкология
             </p>
-            <h1 className="font-display text-6xl md:text-7xl text-foreground leading-tight mb-6">
+            <h1 className="font-display text-6xl md:text-7xl text-foreground leading-tight mb-5">
               Онкопроводник —<br />
               <em>ваш надёжный гид</em>
             </h1>
-            <p className="text-xl text-muted-foreground max-w-xl leading-relaxed mb-10">
-              Инструмент для структурированного контроля симптомов, оценки боли и психоэмоционального состояния, ведения дневника самочувствия и информирования пациентов.
+            <p className="text-xl text-muted-foreground max-w-xl leading-relaxed">
+              Выберите раздел — и приложение проведёт вас по нужному маршруту.
             </p>
-            <div className="flex items-center gap-4 flex-wrap">
-              <button
-                onClick={() => setSection("tracker")}
-                className="px-7 py-3.5 bg-foreground text-background rounded-xl font-medium hover:opacity-85 transition-opacity"
-              >
-                Открыть трекер
-              </button>
-              <button
-                onClick={() => setSection("journey")}
-                className="px-7 py-3.5 border border-border rounded-xl font-medium text-foreground hover:bg-secondary transition-colors"
-              >
-                Путь пациента
-              </button>
-              <button
-                onClick={() => setSection("diary")}
-                className="px-7 py-3.5 border border-border rounded-xl font-medium text-foreground hover:bg-secondary transition-colors"
-              >
-                Дневник
-              </button>
-            </div>
           </section>
 
-          <div className="border-t border-border" />
+          {/* ── STACKED INTERACTIVE CARDS ── */}
+          <section className="pb-20">
+            {(() => {
+              const cards: { key: Section; icon: string; label: string; desc: string; accent: string }[] = [
+                {
+                  key: "journey",
+                  icon: "Route",
+                  label: "Путь пациента",
+                  desc: "Персональный план лечения с визуализацией всех этапов — от консилиума до завершения курса.",
+                  accent: "#6366f1",
+                },
+                {
+                  key: "tracker",
+                  icon: "Activity",
+                  label: "Трекер шкал",
+                  desc: "Оценка ECOG, боли по ВАШ и тревожности по GAD-7 — структурированно и быстро.",
+                  accent: "#a78bfa",
+                },
+                {
+                  key: "diary",
+                  icon: "NotebookPen",
+                  label: "Дневник самочувствия",
+                  desc: "Ежедневные записи о состоянии. Помогает врачу видеть динамику между визитами.",
+                  accent: "#60a5fa",
+                },
+                {
+                  key: "calendar",
+                  icon: "CalendarDays",
+                  label: "Календарь событий",
+                  desc: "Приёмы, процедуры, анализы — все медицинские события в одном календаре.",
+                  accent: "#34d399",
+                },
+                {
+                  key: "reference",
+                  icon: "BookOpen",
+                  label: "Справочник нозологий",
+                  desc: "Клиническая информация по онкоурологическим заболеваниям: симптомы, диагностика, стадии.",
+                  accent: "#f59e0b",
+                },
+                {
+                  key: "anxiety",
+                  icon: "HeartPulse",
+                  label: "Психоэмоциональное состояние",
+                  desc: "Скрининг тревоги и депрессии, мониторинг эмоционального фона в динамике.",
+                  accent: "#f472b6",
+                },
+              ];
 
-          <section className="py-16 grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: "ClipboardList",
-                title: "Трекер шкал",
-                desc: "Оценка функционального статуса ECOG, боли по ВАШ и тревожности по GAD-7 — всё в одном месте.",
-              },
-              {
-                icon: "NotebookPen",
-                title: "Дневник самочувствия",
-                desc: "Короткие ежедневные записи и общая оценка дня. Помогает врачу видеть динамику между визитами.",
-              },
-              {
-                icon: "BookOpen",
-                title: "Справочник",
-                desc: "Структурированная информация по нозологиям: симптомы, диагностика, стадии и методы лечения.",
-              },
-            ].map((f, i) => (
-              <div
-                key={f.title}
-                className="animate-fade-up"
-                style={{ animationDelay: `${i * 0.15}s`, opacity: 0 }}
-              >
-                <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center mb-4">
-                  <Icon name={f.icon} size={22} className="text-foreground" />
+              return (
+                <div className="relative" style={{ height: `${cards.length * 64 + 260}px` }}>
+                  {cards.map((card, i) => (
+                    <button
+                      key={card.key}
+                      onClick={() => setSection(card.key)}
+                      className="absolute left-0 right-0 group text-left rounded-2xl border border-border bg-card transition-all duration-300 ease-out"
+                      style={{
+                        top: `${i * 58}px`,
+                        zIndex: cards.length - i,
+                        transformOrigin: "top center",
+                        padding: "28px 32px",
+                      }}
+                      onMouseEnter={e => {
+                        const el = e.currentTarget;
+                        el.style.transform = "translateY(-8px) scale(1.01)";
+                        el.style.boxShadow = `0 20px 48px ${card.accent}22, 0 4px 16px rgba(0,0,0,0.08)`;
+                        el.style.borderColor = card.accent + "60";
+                        el.style.zIndex = String(cards.length + 10);
+                      }}
+                      onMouseLeave={e => {
+                        const el = e.currentTarget;
+                        el.style.transform = "";
+                        el.style.boxShadow = "";
+                        el.style.borderColor = "";
+                        el.style.zIndex = String(cards.length - i);
+                      }}
+                    >
+                      <div className="flex items-center gap-5">
+                        {/* Icon block */}
+                        <div
+                          className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
+                          style={{ backgroundColor: card.accent + "18" }}
+                        >
+                          <Icon name={card.icon as "Route"} size={26} style={{ color: card.accent }} />
+                        </div>
+
+                        {/* Text */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-foreground text-lg leading-tight mb-1">{card.label}</p>
+                          <p className="text-sm text-muted-foreground leading-relaxed line-clamp-1 group-hover:line-clamp-none transition-all">{card.desc}</p>
+                        </div>
+
+                        {/* Arrow */}
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-200 -translate-x-2 group-hover:translate-x-0"
+                          style={{ backgroundColor: card.accent + "18" }}
+                        >
+                          <Icon name="ArrowRight" size={16} style={{ color: card.accent }} />
+                        </div>
+                      </div>
+
+                      {/* Bottom accent line */}
+                      <div
+                        className="absolute bottom-0 left-8 right-8 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{ background: `linear-gradient(to right, transparent, ${card.accent}60, transparent)` }}
+                      />
+                    </button>
+                  ))}
                 </div>
-                <h3 className="font-semibold text-foreground text-lg mb-2">{f.title}</h3>
-                <p className="text-muted-foreground leading-relaxed text-sm">{f.desc}</p>
-              </div>
-            ))}
-          </section>
-
-          <div className="border-t border-border" />
-
-          <section className="py-16 grid grid-cols-3 gap-8 text-center">
-            {[
-              { value: "35+", label: "симптомов в трекере" },
-              { value: "ECOG 0–4", label: "функциональный статус" },
-              { value: "МКБ-10", label: "кодировка нозологий" },
-            ].map((stat) => (
-              <div key={stat.label}>
-                <div className="font-display text-5xl text-foreground mb-2">{stat.value}</div>
-                <div className="text-muted-foreground text-sm">{stat.label}</div>
-              </div>
-            ))}
-          </section>
-
-          <section className="pb-16">
-            <div className="bg-foreground rounded-2xl px-10 py-12 text-center">
-              <h2 className="font-display text-4xl text-background mb-4">Попробуйте прямо сейчас</h2>
-              <p className="text-background/60 mb-8 max-w-md mx-auto">
-                Отметьте симптомы пациента и получите автоматическую оценку ECOG — без регистрации.
-              </p>
-              <button
-                onClick={() => setSection("tracker")}
-                className="px-8 py-3.5 bg-background text-foreground rounded-xl font-medium hover:opacity-90 transition-opacity"
-              >
-                Открыть трекер
-              </button>
-            </div>
+              );
+            })()}
           </section>
         </main>
       )}
