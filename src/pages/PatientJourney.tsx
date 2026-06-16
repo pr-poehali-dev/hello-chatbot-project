@@ -44,10 +44,10 @@ function fmt(d: Date) {
 
 type CycleBlock = {
   num: number;
-  bloodDate: Date;    // анализы за 2 дня до цикла (цикл 1 — в день цикла)
+  bloodDate: Date;    // анализы за 3–5 дней до цикла
   infusionDate: Date; // день введения
-  psaControl: boolean;      // контроль ПСА после этого цикла
-  fullControl: boolean;     // полный контроль (ПСА + визуализация)
+  psaControl: boolean;
+  fullControl: boolean;
   psaDate?: Date;
   imagingDates?: Date[];
 };
@@ -60,7 +60,8 @@ function buildCycles(start: Date, scheme: Scheme, totalCycles: number): CycleBlo
 
   for (let n = 1; n <= totalCycles; n++) {
     const infusion = new Date(cursor);
-    const blood = n === 1 ? new Date(cursor) : addDays(cursor, -2);
+    // ОАК за 3–5 дней до каждого цикла (стандарт клинической практики)
+    const blood = addDays(cursor, -4);
 
     // После 3-го цикла — контроль ПСА
     const psaControl = n === 3 || (totalCycles === 9 && n === 6) || n === totalCycles;
@@ -291,20 +292,21 @@ function ChemoTimeline({
 
                 {/* ── CYCLE DOT on axis ── */}
                 {/* glow ring when active */}
-                <circle cx={cx} cy={AXIS_Y} r={DOT_R + 6}
-                  fill={C.cycle.dot} opacity={cycleActive ? 0.18 : 0}
+                <circle cx={cx} cy={AXIS_Y} r={DOT_R + 8}
+                  fill={C.cycle.dot} opacity={cycleActive ? 0.15 : 0}
                   style={{ transition: "opacity 0.2s" }}
                 />
                 <g style={{ cursor: "pointer" }} onClick={() => tap(cycleId)}>
+                  {/* White/card base so dot fully covers the axis line */}
+                  <circle cx={cx} cy={AXIS_Y} r={DOT_R + 1} fill="hsl(var(--card))" />
                   <circle cx={cx} cy={AXIS_Y} r={DOT_R}
-                    fill={cycleDone ? "hsl(var(--muted))" : C.cycle.bg}
-                    stroke={cycleDone ? "hsl(var(--border))" : C.cycle.border}
-                    strokeWidth={2}
-                    opacity={cycleDone ? 0.5 : 1}
+                    fill={cycleDone ? "hsl(var(--muted))" : "#3b0764"}
+                    stroke={cycleDone ? "hsl(var(--muted-foreground))" : C.cycle.dot}
+                    strokeWidth={2.5}
                   />
                   {cycleDone
                     ? <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={16} fill={C.cycle.dot}>✓</text>
-                    : <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={15} fontWeight="700" fill={C.cycle.text}>{b.num}</text>
+                    : <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={15} fontWeight="800" fill={C.cycle.text}>{b.num}</text>
                   }
                 </g>
 
