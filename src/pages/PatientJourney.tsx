@@ -374,56 +374,54 @@ export default function PatientJourney() {
   );
 
   // ── STEP: TIMELINE ─────────────────────────────────────────────────────
-  // Layout: center axis, left = diagnostics/labs, right = treatment
 
-  const leftEvents  = timeline.filter(e => e.side === "left");
-  const rightEvents = timeline.filter(e => e.side === "right");
-  const centerEvents = timeline.filter(e => e.side === "center");
+  // SVG proportional timeline constants
+  const SVG_PX_PER_DAY = 28;   // pixels per day along Y axis
+  const AXIS_X = 420;           // X position of the center axis
+  const SVG_PADDING_TOP = 40;
+  const SVG_PADDING_BOT = 60;
+  const LABEL_WIDTH = 360;      // max label panel width on each side
+  const WHISKER = 90;           // length of horizontal whisker line
 
-  // Group all events by row index — sort all by date, assign row
-  const sorted = [...timeline].sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  // Build rows: each unique "date-group" is a row
-  // We need to pair left/right events that occur close together
-  type Row = { left?: TimelineEvent; right?: TimelineEvent; center?: TimelineEvent; rowDate: Date };
-  const rows: Row[] = [];
-
-  const used = new Set<string>();
-
-  for (const ev of sorted) {
-    if (used.has(ev.id)) continue;
-    used.add(ev.id);
-
-    if (ev.side === "center") {
-      rows.push({ center: ev, rowDate: ev.date });
-      continue;
-    }
-
-    // Find a matching event on opposite side within same cycle
-    const row: Row = { rowDate: ev.date };
-
-    if (ev.side === "left") {
-      row.left = ev;
-      // Try to pair with a right event in same cycleNum
-      const pair = sorted.find(e => !used.has(e.id) && e.side === "right" && e.cycleNum === ev.cycleNum);
-      if (pair) { row.right = pair; used.add(pair.id); }
-    } else {
-      row.right = ev;
-      const pair = sorted.find(e => !used.has(e.id) && e.side === "left" && e.cycleNum === ev.cycleNum);
-      if (pair) { row.left = pair; used.add(pair.id); }
-    }
-
-    rows.push(row);
-  }
-
-  // Total progress
   const endEvent = timeline.find(e => e.id === "end");
 
+  // Sort events by date
+  const sorted = [...timeline].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  if (sorted.length === 0) return null;
+
+  const t0 = sorted[0].date.getTime();
+  const tEnd = sorted[sorted.length - 1].date.getTime();
+  const totalDays = Math.max((tEnd - t0) / 86400000, 1);
+  const svgHeight = SVG_PADDING_TOP + totalDays * SVG_PX_PER_DAY + SVG_PADDING_BOT;
+  const svgWidth = AXIS_X * 2 + 1; // symmetric
+
+  const dayY = (date: Date) => SVG_PADDING_TOP + ((date.getTime() - t0) / 86400000) * SVG_PX_PER_DAY;
+
+  // Color map
+  const COLOR: Record<string, string> = {
+    start:   "#6366f1",
+    end:     "#6366f1",
+    cycle:   "#a78bfa",
+    blood:   "#60a5fa",
+    psa:     "#fbbf24",
+    imaging: "#34d399",
+  };
+  const evColor = (ev: TimelineEvent) =>
+    ev.type === "psa" && ev.isControl ? "#fbbf24" : COLOR[ev.type] ?? "#6b7280";
+
+  // Dot radius
+  const dotR = (ev: TimelineEvent) => {
+    if (ev.type === "start" || ev.type === "end") return 9;
+    if (ev.type === "cycle") return 7;
+    return 5;
+  };
+
   return (
-    <main className="max-w-5xl mx-auto px-4 py-10 animate-fade-in">
+    <main className="w-full px-4 py-10 animate-fade-in">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
+      <div className="max-w-4xl mx-auto flex items-start justify-between gap-4 mb-6 flex-wrap">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Путь пациента</p>
           <h2 className="font-display text-3xl text-foreground">
@@ -447,177 +445,247 @@ export default function PatientJourney() {
       </div>
 
       {/* Progress bar */}
-      <div className="w-full h-1 bg-border rounded-full mb-10 overflow-hidden">
+      <div className="max-w-4xl mx-auto w-full h-1 bg-border rounded-full mb-6 overflow-hidden">
         <div className="h-full rounded-full transition-all duration-500 bg-indigo-500" style={{ width: `${progress}%` }} />
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-5 mb-10 px-2">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="font-semibold text-foreground uppercase tracking-widest text-[10px]">Левая сторона</span>— обследования и анализы</div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="font-semibold text-foreground uppercase tracking-widest text-[10px]">Правая сторона</span>— лечение (циклы)</div>
+      <div className="max-w-4xl mx-auto flex flex-wrap gap-4 mb-8">
         {[
           { color: "#a78bfa", label: "Цикл ХТ" },
           { color: "#60a5fa", label: "Анализ крови" },
           { color: "#fbbf24", label: "Контроль ПСА" },
-          { color: "#34d399", label: "Визуализация" },
+          { color: "#34d399", label: "Визуализация / МРТ" },
         ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+          <div key={label} className="flex items-center gap-2">
+            <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill={color} opacity="0.9" /></svg>
             <span className="text-xs text-muted-foreground">{label}</span>
           </div>
         ))}
+        <div className="text-xs text-muted-foreground ml-2 italic">← обследования · лечение →</div>
       </div>
 
-      {/* ── DUAL-SIDE TIMELINE ── */}
-      <div className="relative">
-        {rows.map((row, idx) => {
-          const isCenter = !!row.center;
-          const isLast = idx === rows.length - 1;
+      {/* ── SVG TIMELINE ── */}
+      <div className="overflow-x-auto">
+        <svg
+          width={svgWidth}
+          height={svgHeight}
+          style={{ display: "block", margin: "0 auto", fontFamily: "inherit" }}
+        >
+          {/* ── AXIS LINE ── */}
+          <line
+            x1={AXIS_X} y1={SVG_PADDING_TOP - 10}
+            x2={AXIS_X} y2={svgHeight - SVG_PADDING_BOT + 10}
+            stroke="hsl(var(--border))"
+            strokeWidth={3}
+            strokeLinecap="round"
+          />
 
-          return (
-            <div key={idx} className="flex items-stretch min-h-[72px]">
+          {/* ── SEGMENT COLORS between events (color = next event's type) ── */}
+          {sorted.map((ev, i) => {
+            if (i === 0) return null;
+            const prev = sorted[i - 1];
+            const y1 = dayY(prev.date);
+            const y2 = dayY(ev.date);
+            const segColor = evColor(ev);
+            return (
+              <line key={`seg-${i}`}
+                x1={AXIS_X} y1={y1 + dotR(prev)}
+                x2={AXIS_X} y2={y2 - dotR(ev)}
+                stroke={segColor}
+                strokeWidth={3}
+                strokeOpacity={0.25}
+                strokeLinecap="round"
+              />
+            );
+          })}
 
-              {/* ── LEFT COLUMN ── */}
-              <div className="flex-1 flex justify-end pr-6 py-2">
-                {row.left && (() => {
-                  const ev = row.left;
-                  const st = getStyle(ev.type, ev.isControl);
-                  const done = completedIds.has(ev.id);
-                  const active = activeId === ev.id;
-                  return (
-                    <div className="max-w-[280px] w-full">
-                      <button
-                        onClick={() => { setActiveId(active ? null : ev.id); }}
-                        className={`w-full text-right transition-all ${done ? "opacity-40" : ""}`}
-                      >
-                        <div className={`inline-block px-4 py-2.5 rounded-2xl border transition-all text-right ${
-                          active ? "border-current shadow-sm" : "border-transparent hover:border-border hover:bg-secondary/50"
-                        }`} style={active ? { borderColor: st.color + "60", backgroundColor: st.color + "08" } : {}}>
-                          <p className={`text-sm font-medium text-foreground ${done ? "line-through" : ""}`}>{ev.label}</p>
-                          {ev.sublabel && <p className="text-xs text-muted-foreground mt-0.5">{ev.sublabel}</p>}
-                          <p className="text-xs mt-1 font-mono" style={{ color: st.color }}>{formatDateShort(ev.date)}</p>
-                        </div>
-                      </button>
-                      {active && (
-                        <div className="mt-2 px-4 py-3 rounded-2xl text-right text-xs text-muted-foreground leading-relaxed border border-border bg-card">
-                          {ev.type === "blood" && <><p className="font-medium text-foreground mb-1">Состав анализа</p><p>ОАК с лейкоформулой · АЛТ, АСТ, билирубин · Креатинин · Глюкоза</p></>}
-                          {ev.type === "psa" && <><p className="font-medium text-foreground mb-1">ПСА</p><p>Снижение ≥ 50% от базового — биохимический ответ</p></>}
-                          {ev.type === "imaging" && <><p className="font-medium text-foreground mb-1">{ev.label}</p><p>Оценка по критериям RECIST 1.1</p></>}
-                          <button onClick={() => toggle(ev.id)}
-                            className={`mt-2 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${done ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-                            {done ? "Отмечено выполненным" : "Отметить выполненным"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
+          {/* ── EVENTS ── */}
+          {sorted.map((ev) => {
+            const y = dayY(ev.date);
+            const color = evColor(ev);
+            const r = dotR(ev);
+            const done = completedIds.has(ev.id);
+            const isActive = activeId === ev.id;
+            const isLeft = ev.side === "left";
+            const isCenter = ev.side === "center";
 
-              {/* ── CENTER AXIS ── */}
-              <div className="flex flex-col items-center" style={{ width: 56 }}>
-                {/* top connector */}
-                {idx > 0 && (
-                  <div className="flex flex-col items-center" style={{ width: 4 }}>
-                    {/* dashed gap segment */}
-                    <div style={{ width: 3, height: 10, background: "repeating-linear-gradient(to bottom, hsl(var(--border)) 0px, hsl(var(--border)) 4px, transparent 4px, transparent 8px)" }} />
-                  </div>
+            // Whisker endpoint X
+            const whiskerEndX = isLeft
+              ? AXIS_X - WHISKER
+              : AXIS_X + WHISKER;
+
+            // Label anchor
+            const labelX = isLeft ? AXIS_X - WHISKER - 10 : AXIS_X + WHISKER + 10;
+            const textAnchor = isLeft ? "end" : "start";
+
+            const labelFontSize = ev.type === "cycle" || isCenter ? 13 : 11;
+            const labelFontWeight = ev.type === "cycle" || isCenter ? "600" : "400";
+
+            return (
+              <g
+                key={ev.id}
+                style={{ cursor: "pointer" }}
+                onClick={() => setActiveId(isActive ? null : ev.id)}
+              >
+                {/* Whisker line — dashed */}
+                {!isCenter && (
+                  <line
+                    x1={isLeft ? AXIS_X - r : AXIS_X + r}
+                    y1={y}
+                    x2={whiskerEndX}
+                    y2={y}
+                    stroke={color}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    strokeOpacity={done ? 0.3 : 0.7}
+                  />
                 )}
 
-                {/* dot */}
-                {isCenter ? (
-                  <div className="flex items-center justify-center rounded-full border-2 z-10 flex-shrink-0"
-                    style={{
-                      width: 20, height: 20,
-                      borderColor: "#6366f1",
-                      backgroundColor: "hsl(var(--background))",
-                      boxShadow: `0 0 0 4px #6366f115`,
-                    }}>
-                    <div className="rounded-full" style={{ width: 8, height: 8, backgroundColor: "#6366f1" }} />
-                  </div>
-                ) : (
-                  (() => {
-                    const ev = row.right || row.left;
-                    const st = ev ? getStyle(ev.type, ev.isControl) : { color: "#6b7280", dotSize: 8 };
-                    const dotSz = row.right?.type === "cycle" ? 14 : 9;
-                    return (
-                      <div className="rounded-full flex-shrink-0 z-10"
+                {/* Dot — outer glow ring */}
+                <circle
+                  cx={AXIS_X} cy={y} r={r + 4}
+                  fill={color}
+                  opacity={isActive ? 0.15 : 0}
+                />
+                {/* Dot */}
+                <circle
+                  cx={AXIS_X} cy={y} r={r}
+                  fill={done ? "hsl(var(--muted))" : color}
+                  stroke={done ? color : "none"}
+                  strokeWidth={done ? 2 : 0}
+                  opacity={done ? 0.5 : 1}
+                />
+                {/* Checkmark inside done dot */}
+                {done && (
+                  <text x={AXIS_X} y={y + 1} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={r * 1.1} fill={color} fontWeight="700">✓</text>
+                )}
+
+                {/* Label */}
+                <text
+                  x={labelX} y={y - (ev.sublabel ? 7 : 1)}
+                  textAnchor={textAnchor}
+                  dominantBaseline="middle"
+                  fontSize={labelFontSize}
+                  fontWeight={labelFontWeight}
+                  fill={done ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))"}
+                  opacity={done ? 0.5 : 1}
+                  style={{ textDecoration: done ? "line-through" : "none" }}
+                >
+                  {ev.label}
+                </text>
+                {ev.sublabel && (
+                  <text
+                    x={labelX} y={y + 8}
+                    textAnchor={textAnchor}
+                    dominantBaseline="middle"
+                    fontSize={9}
+                    fill="hsl(var(--muted-foreground))"
+                    opacity={done ? 0.4 : 0.7}
+                  >
+                    {ev.sublabel}
+                  </text>
+                )}
+
+                {/* Date badge */}
+                <text
+                  x={isCenter ? AXIS_X + r + 8 : (isLeft ? labelX - 4 : labelX + 4)}
+                  y={y + (ev.sublabel ? 19 : 13)}
+                  textAnchor={isLeft && !isCenter ? "end" : "start"}
+                  dominantBaseline="middle"
+                  fontSize={9}
+                  fontFamily="monospace"
+                  fill={color}
+                  opacity={done ? 0.4 : 0.85}
+                >
+                  {formatDateShort(ev.date)}
+                </text>
+
+                {/* Active highlight panel (foreignObject) */}
+                {isActive && (
+                  <foreignObject
+                    x={isLeft ? AXIS_X - WHISKER - LABEL_WIDTH - 8 : AXIS_X + WHISKER + 8}
+                    y={y + 28}
+                    width={LABEL_WIDTH - 20}
+                    height={120}
+                  >
+                    <div
+                      style={{
+                        background: "hsl(var(--card))",
+                        border: `1px solid ${color}50`,
+                        borderRadius: 12,
+                        padding: "10px 14px",
+                        fontSize: 11,
+                        color: "hsl(var(--muted-foreground))",
+                        lineHeight: 1.5,
+                        boxShadow: `0 2px 12px ${color}20`,
+                      }}
+                    >
+                      {ev.type === "blood" && (
+                        <p>ОАК с лейкоформулой · АЛТ, АСТ, билирубин · Креатинин · Глюкоза</p>
+                      )}
+                      {ev.type === "psa" && (
+                        <p>Снижение ПСА ≥ 50% от базового — биохимический ответ на лечение</p>
+                      )}
+                      {ev.type === "imaging" && (
+                        <p>Оценка ответа по критериям RECIST 1.1</p>
+                      )}
+                      {ev.type === "cycle" && selectedScheme && (
+                        <p>{selectedScheme.drug} {selectedScheme.dose} · в/в, 1 ч · Премедикация: дексаметазон накануне, в день и на следующий день</p>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggle(ev.id); }}
                         style={{
-                          width: dotSz, height: dotSz,
-                          backgroundColor: st.color,
-                          boxShadow: `0 0 0 3px ${st.color}25`,
-                          margin: "0 auto",
-                        }} />
-                    );
-                  })()
-                )}
-
-                {/* bottom connector line (solid, thicker) */}
-                {!isLast && (
-                  <div style={{
-                    flex: 1,
-                    width: 3,
-                    background: "hsl(var(--border))",
-                    minHeight: 24,
-                  }} />
-                )}
-              </div>
-
-              {/* ── RIGHT COLUMN ── */}
-              <div className="flex-1 flex justify-start pl-6 py-2">
-                {row.center ? (
-                  <div className="flex items-center h-full">
-                    <div className="px-4 py-2 rounded-2xl border border-indigo-200 bg-indigo-50">
-                      <p className="text-sm font-semibold text-indigo-700">{row.center.label}</p>
-                      {row.center.sublabel && <p className="text-xs text-indigo-500 mt-0.5">{row.center.sublabel}</p>}
-                      <p className="text-xs font-mono text-indigo-400 mt-1">{formatDateShort(row.center.date)}</p>
-                    </div>
-                  </div>
-                ) : row.right && (() => {
-                  const ev = row.right;
-                  const st = getStyle(ev.type, ev.isControl);
-                  const done = completedIds.has(ev.id);
-                  const active = activeId === ev.id;
-                  const isCycle = ev.type === "cycle";
-                  return (
-                    <div className="max-w-[280px] w-full">
-                      <button
-                        onClick={() => setActiveId(active ? null : ev.id)}
-                        className={`w-full text-left transition-all ${done ? "opacity-40" : ""}`}
+                          marginTop: 8,
+                          padding: "3px 10px",
+                          borderRadius: 8,
+                          border: `1px solid ${color}60`,
+                          background: done ? color + "20" : "transparent",
+                          color: color,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
                       >
-                        <div className={`inline-block w-full px-4 py-2.5 rounded-2xl border transition-all ${
-                          isCycle ? "border-current" : "border-transparent hover:border-border hover:bg-secondary/50"
-                        } ${active ? "shadow-sm" : ""}`}
-                          style={isCycle
-                            ? { borderColor: st.color + "50", backgroundColor: st.color + "10" }
-                            : active ? { borderColor: st.color + "60", backgroundColor: st.color + "08" } : {}
-                          }>
-                          <p className={`text-sm font-medium text-foreground ${done ? "line-through" : ""} ${isCycle ? "font-semibold" : ""}`}>{ev.label}</p>
-                          {ev.sublabel && <p className="text-xs text-muted-foreground mt-0.5">{ev.sublabel}</p>}
-                          <p className="text-xs mt-1 font-mono" style={{ color: st.color }}>{formatDateShort(ev.date)}</p>
-                        </div>
+                        {done ? "✓ Выполнено" : "Отметить выполненным"}
                       </button>
-                      {active && (
-                        <div className="mt-2 px-4 py-3 rounded-2xl text-xs text-muted-foreground leading-relaxed border border-border bg-card">
-                          {ev.type === "cycle" && selectedScheme && (
-                            <><p className="font-medium text-foreground mb-1">{selectedScheme.drug} {selectedScheme.dose}</p>
-                            <p>В/в капельно, 1 час · каждые {selectedScheme.cycleDays} дней</p>
-                            <p className="mt-1">Премедикация: дексаметазон — накануне, в день и на следующий день</p></>
-                          )}
-                          <button onClick={() => toggle(ev.id)}
-                            className={`mt-2 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${done ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-                            {done ? "Отмечено выполненным" : "Отметить выполненным"}
-                          </button>
-                        </div>
-                      )}
                     </div>
-                  );
-                })()}
-              </div>
+                  </foreignObject>
+                )}
+              </g>
+            );
+          })}
 
-            </div>
-          );
-        })}
+          {/* ── MONTH LABELS on axis ── */}
+          {(() => {
+            const labels: { y: number; label: string }[] = [];
+            const start = sorted[0].date;
+            const end = sorted[sorted.length - 1].date;
+            const d = new Date(start.getFullYear(), start.getMonth(), 1);
+            while (d <= end) {
+              const y = dayY(d);
+              if (y >= SVG_PADDING_TOP) {
+                labels.push({
+                  y,
+                  label: d.toLocaleDateString("ru-RU", { month: "short", year: "numeric" }),
+                });
+              }
+              d.setMonth(d.getMonth() + 1);
+            }
+            return labels.map(({ y, label }) => (
+              <g key={label}>
+                <line x1={AXIS_X - 6} y1={y} x2={AXIS_X + 6} y2={y}
+                  stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeOpacity={0.4} />
+                <text x={AXIS_X} y={y - 6} textAnchor="middle" fontSize={8}
+                  fill="hsl(var(--muted-foreground))" opacity={0.4}>
+                  {label}
+                </text>
+              </g>
+            ));
+          })()}
+
+        </svg>
       </div>
 
     </main>
