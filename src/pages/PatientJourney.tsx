@@ -1,691 +1,512 @@
 import { useState } from "react";
 import Icon from "@/components/ui/icon";
 
-// ── TYPES ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────
 
 type TreatmentType = "chemo" | "surgery" | "radiation" | "diagnostics" | null;
 
-type ChemoScheme = {
+type Scheme = {
   id: string;
   name: string;
   drug: string;
   dose: string;
   cycleOptions: number[];
   cycleDays: number;
-  bloodBeforeCycle: boolean;
-  psaAfterCycle?: number;
-  imagingAfterCycle?: number;
 };
 
-type TimelineEvent = {
-  id: string;
-  type: "start" | "blood" | "psa" | "cycle" | "imaging" | "end";
-  label: string;
-  sublabel?: string;
-  date: Date;
-  cycleNum?: number;
-  isControl?: boolean;
-  side: "left" | "right" | "center";
-};
+// ─────────────────────────────────────────────────────────────
+// SCHEMES
+// ─────────────────────────────────────────────────────────────
 
-// ── CHEMO SCHEMES ──────────────────────────────────────────────────────────
-
-const CHEMO_SCHEMES: ChemoScheme[] = [
-  {
-    id: "docetaxel",
-    name: "Доцетаксел",
-    drug: "Доцетаксел",
-    dose: "75 мг/м²",
-    cycleOptions: [6, 9],
-    cycleDays: 21,
-    bloodBeforeCycle: true,
-    psaAfterCycle: 3,
-    imagingAfterCycle: 6,
-  },
+const SCHEMES: Scheme[] = [
+  { id: "docetaxel", name: "Доцетаксел", drug: "Доцетаксел", dose: "75 мг/м²", cycleOptions: [6, 9], cycleDays: 21 },
 ];
 
-// ── HELPERS ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
 
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+function addDays(d: Date, n: number) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
 }
 
-function formatDate(d: Date): string {
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function formatDateShort(d: Date): string {
+function fmt(d: Date) {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
-// ── BUILD TIMELINE ─────────────────────────────────────────────────────────
-// left  = обследования / анализы
-// right = лечение (циклы)
-// center = старт / финиш / ключевые точки контроля
+// ─────────────────────────────────────────────────────────────
+// CYCLE DATA MODEL
+// ─────────────────────────────────────────────────────────────
 
-function buildChemoTimeline(
-  startDate: Date,
-  scheme: ChemoScheme,
-  cycles: number,
-  priorExams: string[]
-): TimelineEvent[] {
-  const events: TimelineEvent[] = [];
-  let cursor = new Date(startDate);
+type CycleBlock = {
+  num: number;
+  bloodDate: Date;    // анализы за 2 дня до цикла (цикл 1 — в день цикла)
+  infusionDate: Date; // день введения
+  psaControl: boolean;      // контроль ПСА после этого цикла
+  fullControl: boolean;     // полный контроль (ПСА + визуализация)
+  psaDate?: Date;
+  imagingDates?: Date[];
+};
 
-  const imagingList = priorExams.length > 0 ? priorExams : ["МРТ малого таза", "Рентген грудной клетки", "УЗИ брюшной полости"];
+function buildCycles(start: Date, scheme: Scheme, totalCycles: number): CycleBlock[] {
+  const blocks: CycleBlock[] = [];
+  let cursor = new Date(start);
 
-  // Start
-  events.push({ id: "start", type: "start", label: "Начало лечения", sublabel: `Консилиум · ${scheme.name} ${scheme.dose}`, date: new Date(cursor), side: "center" });
+  const imagingList = ["МРТ малого таза", "КТ органов грудной клетки", "УЗИ брюшной полости"];
 
-  for (let c = 1; c <= cycles; c++) {
-    // Blood before cycle
-    if (scheme.bloodBeforeCycle) {
-      const bd = c === 1 ? new Date(cursor) : addDays(cursor, -2);
-      events.push({ id: `blood-${c}`, type: "blood", label: "ОАК + биохимия", sublabel: `Перед циклом ${c}`, date: bd, cycleNum: c, side: "left" });
-    }
+  for (let n = 1; n <= totalCycles; n++) {
+    const infusion = new Date(cursor);
+    const blood = n === 1 ? new Date(cursor) : addDays(cursor, -2);
 
-    // Cycle
-    events.push({ id: `cycle-${c}`, type: "cycle", label: `Цикл ${c}`, sublabel: `${scheme.drug} ${scheme.dose}`, date: new Date(cursor), cycleNum: c, side: "right" });
+    // После 3-го цикла — контроль ПСА
+    const psaControl = n === 3 || (totalCycles === 9 && n === 6) || n === totalCycles;
+    // После 6-го цикла (и при 9 после 6) — полный контроль
+    const fullControl = n === 6 || (n === totalCycles && n !== 6);
 
-    // PSA control
-    const addPSA = (id: string, afterCycle: number, label: string) => {
-      events.push({ id, type: "psa", label: "Контроль ПСА", sublabel: label, date: addDays(cursor, 5), cycleNum: afterCycle, isControl: true, side: "left" });
-    };
+    const psaDate = psaControl ? addDays(infusion, 7) : undefined;
+    const imagingDates = fullControl
+      ? imagingList.map((_, i) => addDays(infusion, 21 + i))
+      : undefined;
 
-    const addImaging = (suffix: string, afterCycle: number, label: string) => {
-      imagingList.forEach((exam, idx) => {
-        events.push({ id: `img-${suffix}-${idx}`, type: "imaging", label: exam, sublabel: label, date: addDays(cursor, 7 + idx), cycleNum: afterCycle, isControl: true, side: "left" });
-      });
-    };
-
-    if (scheme.psaAfterCycle && c === scheme.psaAfterCycle) {
-      addPSA(`psa-${c}`, c, `После цикла ${c}`);
-    }
-
-    if (scheme.imagingAfterCycle && c === scheme.imagingAfterCycle) {
-      addImaging(`${c}`, c, `После цикла ${c} · контроль`);
-    }
-
-    // For 9-cycle: mid-point at cycle 6
-    if (cycles === 9 && c === 6 && scheme.psaAfterCycle !== 6) {
-      addPSA("psa-mid", 6, "После цикла 6 · промежуточный");
-      addImaging("mid", 6, "После цикла 6 · промежуточный");
-    }
-
+    blocks.push({ num: n, bloodDate: blood, infusionDate: infusion, psaControl, fullControl, psaDate, imagingDates });
     cursor = addDays(cursor, scheme.cycleDays);
   }
-
-  // Final PSA
-  if (scheme.psaAfterCycle !== cycles) {
-    events.push({ id: "psa-final", type: "psa", label: "Контроль ПСА", sublabel: `После цикла ${cycles} · итог`, date: addDays(cursor, 5), isControl: true, side: "left" });
-  }
-
-  // End
-  events.push({ id: "end", type: "end", label: "Завершение курса", sublabel: `${cycles} циклов · оценка ответа`, date: new Date(cursor), side: "center" });
-
-  events.sort((a, b) => a.date.getTime() - b.date.getTime());
-  return events;
+  return blocks;
 }
 
-// ── EVENT STYLE CONFIG ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// COLORS
+// ─────────────────────────────────────────────────────────────
 
-type EvStyle = { color: string; dotSize: number; label: string };
+const C = {
+  blood:   { bg: "#1d4ed820", border: "#3b82f660", dot: "#60a5fa", text: "#93c5fd" },
+  cycle:   { bg: "#6d28d920", border: "#7c3aed60", dot: "#a78bfa", text: "#c4b5fd" },
+  psa:     { bg: "#92400e20", border: "#d9770660", dot: "#fbbf24", text: "#fcd34d" },
+  imaging: { bg: "#065f4620", border: "#05966960", dot: "#34d399", text: "#6ee7b7" },
+};
 
-function getStyle(type: TimelineEvent["type"], isControl?: boolean): EvStyle {
-  switch (type) {
-    case "start":   return { color: "#6366f1", dotSize: 14, label: "" };
-    case "end":     return { color: "#6366f1", dotSize: 14, label: "" };
-    case "blood":   return { color: "#60a5fa", dotSize: 8,  label: "" };
-    case "psa":     return { color: isControl ? "#fbbf24" : "#60a5fa", dotSize: 10, label: "" };
-    case "cycle":   return { color: "#a78bfa", dotSize: 12, label: "" };
-    case "imaging": return { color: "#34d399", dotSize: 8,  label: "" };
-    default:        return { color: "#6b7280", dotSize: 8,  label: "" };
-  }
+// ─────────────────────────────────────────────────────────────
+// TIMELINE COMPONENT
+// ─────────────────────────────────────────────────────────────
+
+function ChemoTimeline({
+  scheme, cycles, startDate, onReset,
+}: {
+  scheme: Scheme; cycles: number; startDate: Date; onReset: () => void;
+}) {
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const [active, setActive] = useState<string | null>(null);
+
+  const blocks = buildCycles(startDate, scheme, cycles);
+  const totalTasks = blocks.length * 2 + blocks.filter(b => b.psaControl).length + blocks.filter(b => b.fullControl).length * 3;
+  const donePct = totalTasks > 0 ? Math.round((done.size / totalTasks) * 100) : 0;
+
+  const toggle = (id: string) => {
+    setDone(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { n.add(id); } return n; });
+  };
+
+  const tap = (id: string) => setActive(p => p === id ? null : id);
+
+  const endDate = addDays(blocks[blocks.length - 1].infusionDate, scheme.cycleDays);
+
+  return (
+    <div className="w-full px-6 py-8 animate-fade-in">
+
+      {/* ── HEADER ── */}
+      <div className="flex items-start justify-between gap-4 mb-2 flex-wrap max-w-6xl mx-auto">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Химиотерапия</p>
+          <h2 className="font-display text-3xl text-foreground">{scheme.name} {scheme.dose} · {cycles} циклов</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {fmt(startDate)} — {fmt(endDate)} · каждые {scheme.cycleDays} дней
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Progress ring */}
+          <div className="relative w-14 h-14">
+            <svg width="56" height="56" className="-rotate-90">
+              <circle cx="28" cy="28" r="22" fill="none" stroke="hsl(var(--border))" strokeWidth="4" />
+              <circle cx="28" cy="28" r="22" fill="none" stroke="#a78bfa" strokeWidth="4"
+                strokeDasharray={`${2 * Math.PI * 22}`}
+                strokeDashoffset={`${2 * Math.PI * 22 * (1 - donePct / 100)}`}
+                strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.5s" }} />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-foreground">{donePct}%</span>
+          </div>
+          <button onClick={onReset} className="px-3 py-2 border border-border rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            Новый план
+          </button>
+        </div>
+      </div>
+
+      {/* ── LEGEND ── */}
+      <div className="flex flex-wrap gap-5 mb-8 max-w-6xl mx-auto">
+        {[
+          { color: C.blood.dot,   label: "Анализы крови" },
+          { color: C.cycle.dot,   label: "Введение препарата" },
+          { color: C.psa.dot,     label: "Контроль ПСА" },
+          { color: C.imaging.dot, label: "Визуализация (МРТ/КТ)" },
+        ].map(l => (
+          <div key={l.label} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: l.color }} />
+            <span className="text-xs text-muted-foreground">{l.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── TIMELINE SCROLL AREA ── */}
+      <div className="overflow-x-auto pb-4" style={{ scrollbarWidth: "thin" }}>
+        <div className="relative" style={{ minWidth: blocks.length * 160 + 80, paddingBottom: 8 }}>
+
+          {/* ────── ROW: АНАЛИЗЫ КРОВИ (над осью, уровень 1) ────── */}
+          <div className="flex items-end mb-0" style={{ height: 90 }}>
+            <div style={{ width: 24 }} />
+            {blocks.map(b => {
+              const id = `blood-${b.num}`;
+              const isDone = done.has(id);
+              const isActive = active === id;
+              return (
+                <div key={id} style={{ width: 160 }} className="flex flex-col items-center">
+                  <button
+                    onClick={() => tap(id)}
+                    className="group flex flex-col items-center gap-1 w-full px-2"
+                  >
+                    <div className={`rounded-xl px-3 py-2 text-center transition-all border ${isActive ? "scale-105 shadow-lg" : "hover:scale-102"}`}
+                      style={{
+                        backgroundColor: isDone ? "hsl(var(--muted))" : C.blood.bg,
+                        borderColor: isDone ? "hsl(var(--border))" : C.blood.border,
+                        opacity: isDone ? 0.5 : 1,
+                      }}>
+                      <p className="text-xs font-semibold" style={{ color: isDone ? "hsl(var(--muted-foreground))" : C.blood.text }}>
+                        ОАК + биохимия
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: C.blood.dot, opacity: 0.8 }}>{fmt(b.bloodDate)}</p>
+                    </div>
+                  </button>
+                  {isActive && (
+                    <div className="absolute z-20 mt-1 rounded-xl border p-3 text-xs shadow-xl w-52"
+                      style={{ backgroundColor: "hsl(var(--card))", borderColor: C.blood.border, top: 0, marginLeft: 0 }}>
+                      <p className="font-semibold text-foreground mb-1">Анализы перед циклом {b.num}</p>
+                      <p className="text-muted-foreground mb-2">ОАК, лейкоформула, АЛТ/АСТ, билирубин, креатинин, глюкоза</p>
+                      <button onClick={() => toggle(id)}
+                        className="w-full py-1 rounded-lg text-xs font-semibold transition-colors"
+                        style={{ background: isDone ? C.blood.dot + "30" : C.blood.bg, color: C.blood.dot, border: `1px solid ${C.blood.border}` }}>
+                        {isDone ? "✓ Выполнено" : "Отметить выполненным"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ────── CONNECTOR DOTS (верхний) ────── */}
+          <div className="flex items-center">
+            <div style={{ width: 24 }} />
+            {blocks.map(b => (
+              <div key={b.num} style={{ width: 160 }} className="flex justify-center">
+                <div className="w-0.5 h-5" style={{ backgroundColor: C.blood.dot, opacity: 0.4 }} />
+              </div>
+            ))}
+          </div>
+
+          {/* ────── MAIN AXIS ROW ────── */}
+          <div className="flex items-center">
+            {/* Start cap */}
+            <div className="flex items-center" style={{ width: 24 }}>
+              <div className="w-6 h-1 rounded-full" style={{ backgroundColor: "hsl(var(--border))" }} />
+            </div>
+
+            {blocks.map((b, i) => {
+              const id = `cycle-${b.num}`;
+              const isDone = done.has(id);
+              const isActive = active === id;
+              const isLast = i === blocks.length - 1;
+
+              return (
+                <div key={id} className="flex items-center" style={{ width: 160 }}>
+                  {/* Segment line before dot */}
+                  <div className="flex-1 h-1 rounded-full" style={{ backgroundColor: isDone ? C.cycle.dot + "40" : "hsl(var(--border))" }} />
+
+                  {/* Cycle dot + label */}
+                  <div className="relative flex flex-col items-center" style={{ zIndex: isActive ? 20 : 1 }}>
+                    <button
+                      onClick={() => tap(id)}
+                      className="flex flex-col items-center transition-transform hover:scale-110"
+                    >
+                      {/* Outer ring */}
+                      <div className="rounded-full flex items-center justify-center"
+                        style={{
+                          width: 48, height: 48,
+                          backgroundColor: isDone ? "hsl(var(--muted))" : C.cycle.bg,
+                          border: `2px solid ${isDone ? "hsl(var(--border))" : C.cycle.border}`,
+                          boxShadow: isActive ? `0 0 0 4px ${C.cycle.dot}30` : "none",
+                          opacity: isDone ? 0.5 : 1,
+                        }}>
+                        {isDone
+                          ? <Icon name="CheckCircle" size={20} style={{ color: C.cycle.dot }} />
+                          : <span className="font-display text-lg font-bold" style={{ color: C.cycle.text }}>{b.num}</span>
+                        }
+                      </div>
+                    </button>
+
+                    {/* Active popup */}
+                    {isActive && (
+                      <div className="absolute top-14 z-30 rounded-2xl border p-4 shadow-2xl w-56"
+                        style={{ backgroundColor: "hsl(var(--card))", borderColor: C.cycle.border }}>
+                        <p className="font-semibold text-foreground mb-1">Цикл {b.num} · {fmt(b.infusionDate)}</p>
+                        <p className="text-xs text-muted-foreground mb-1">{scheme.drug} {scheme.dose}</p>
+                        <p className="text-xs text-muted-foreground mb-3">В/в капельно, 1 ч · Премедикация: дексаметазон</p>
+                        <button onClick={() => toggle(id)}
+                          className="w-full py-1.5 rounded-xl text-xs font-semibold transition-colors"
+                          style={{ background: isDone ? C.cycle.dot + "30" : C.cycle.bg, color: C.cycle.dot, border: `1px solid ${C.cycle.border}` }}>
+                          {isDone ? "✓ Введение выполнено" : "Отметить введение"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Segment line after last dot */}
+                  {isLast && (
+                    <div className="flex-1 h-1 rounded-full" style={{ backgroundColor: "hsl(var(--border))" }} />
+                  )}
+                </div>
+              );
+            })}
+
+            {/* End cap */}
+            <div style={{ width: 24 }} className="flex items-center">
+              <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                style={{ borderColor: "#6366f1", backgroundColor: "#6366f115" }}>
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#6366f1" }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Cycle date labels */}
+          <div className="flex items-start mt-1">
+            <div style={{ width: 24 }} />
+            {blocks.map(b => (
+              <div key={b.num} style={{ width: 160 }} className="flex justify-center">
+                <p className="text-xs font-mono text-center" style={{ color: C.cycle.dot, opacity: 0.7 }}>{fmt(b.infusionDate)}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* ────── CONNECTOR DOTS (нижний) для ПСА ────── */}
+          <div className="flex items-center mt-1">
+            <div style={{ width: 24 }} />
+            {blocks.map(b => (
+              <div key={b.num} style={{ width: 160 }} className="flex justify-center">
+                {(b.psaControl || b.fullControl) && (
+                  <div className="w-0.5 h-5" style={{ backgroundColor: b.fullControl ? C.imaging.dot : C.psa.dot, opacity: 0.4 }} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* ────── ROW: КОНТРОЛЬ ПСА ────── */}
+          <div className="flex items-start mt-0">
+            <div style={{ width: 24 }} />
+            {blocks.map(b => {
+              if (!b.psaControl && !b.fullControl) return <div key={b.num} style={{ width: 160 }} />;
+              const id = `psa-${b.num}`;
+              const isDone = done.has(id);
+              const isActive = active === id;
+              const color = b.fullControl ? C.imaging : C.psa;
+
+              return (
+                <div key={id} style={{ width: 160 }} className="flex flex-col items-center relative">
+                  <button onClick={() => tap(id)} className="w-full px-2">
+                    <div className="rounded-xl px-3 py-2.5 text-center border transition-all hover:scale-105"
+                      style={{
+                        backgroundColor: isDone ? "hsl(var(--muted))" : color.bg,
+                        borderColor: isDone ? "hsl(var(--border))" : color.border,
+                        opacity: isDone ? 0.5 : 1,
+                      }}>
+                      <p className="text-xs font-semibold" style={{ color: isDone ? "hsl(var(--muted-foreground))" : color.text }}>
+                        {b.fullControl ? "Полный контроль" : "Контроль ПСА"}
+                      </p>
+                      {b.psaDate && <p className="text-xs mt-0.5" style={{ color: color.dot, opacity: 0.8 }}>{fmt(b.psaDate)}</p>}
+                      {b.fullControl && <p className="text-xs mt-0.5 opacity-60" style={{ color: color.text }}>ПСА + МРТ + КТ</p>}
+                    </div>
+                  </button>
+
+                  {isActive && (
+                    <div className="absolute top-16 z-30 rounded-2xl border p-4 shadow-2xl w-60"
+                      style={{ backgroundColor: "hsl(var(--card))", borderColor: color.border }}>
+                      <p className="font-semibold text-foreground mb-2">
+                        {b.fullControl ? `Полный контроль после цикла ${b.num}` : `Контроль ПСА после цикла ${b.num}`}
+                      </p>
+                      <div className="space-y-1 mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: C.psa.dot }} />
+                          <p className="text-xs text-muted-foreground">ПСА{b.psaDate ? ` · ${fmt(b.psaDate)}` : ""}</p>
+                        </div>
+                        {b.fullControl && b.imagingDates && ["МРТ малого таза", "КТ органов гр. клетки", "УЗИ брюшной полости"].map((exam, i) => (
+                          <div key={exam} className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: C.imaging.dot }} />
+                            <p className="text-xs text-muted-foreground">{exam}{b.imagingDates ? ` · ${fmt(b.imagingDates[i])}` : ""}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3 italic">Снижение ПСА ≥ 50% — биохимический ответ</p>
+                      <button onClick={() => toggle(id)}
+                        className="w-full py-1.5 rounded-xl text-xs font-semibold"
+                        style={{ background: isDone ? color.dot + "30" : color.bg, color: color.dot, border: `1px solid ${color.border}` }}>
+                        {isDone ? "✓ Контроль выполнен" : "Отметить выполненным"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
 }
 
-// ── COMPONENT ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────
 
 export default function PatientJourney() {
-  const [step, setStep] = useState<"setup" | "exams" | "treatment" | "timeline">("setup");
-
+  const [step, setStep] = useState<"setup" | "treatment" | "timeline">("setup");
   const [councilDate, setCouncilDate] = useState("");
-  const [councilDecision, setCouncilDecision] = useState<TreatmentType>(null);
-
-  const [priorExams, setPriorExams] = useState<string[]>([]);
-  const [newExam, setNewExam] = useState("");
-
-  const [selectedScheme, setSelectedScheme] = useState<ChemoScheme | null>(null);
-  const [selectedCycles, setSelectedCycles] = useState<number | null>(null);
-  const [treatmentStart, setTreatmentStart] = useState("");
-
-  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
-  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [decision, setDecision] = useState<TreatmentType>(null);
+  const [scheme, setScheme] = useState<Scheme | null>(null);
+  const [cycles, setCycles] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState("");
 
   const today = new Date().toISOString().split("T")[0];
 
-  const addExam = () => {
-    const t = newExam.trim();
-    if (t && !priorExams.includes(t)) { setPriorExams(p => [...p, t]); setNewExam(""); }
-  };
+  const reset = () => { setStep("setup"); setScheme(null); setCycles(null); setStartDate(""); setCouncilDate(""); setDecision(null); };
 
-  const buildTimeline = () => {
-    if (!selectedScheme || !selectedCycles || !treatmentStart) return;
-    setTimeline(buildChemoTimeline(new Date(treatmentStart), selectedScheme, selectedCycles, priorExams));
-    setCompletedIds(new Set());
-    setActiveId(null);
-    setStep("timeline");
-  };
-
-  const toggle = (id: string) => setCompletedIds(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { n.add(id); } return n; });
-  const progress = timeline.length ? Math.round((completedIds.size / timeline.length) * 100) : 0;
-
-  const resetAll = () => {
-    setStep("setup"); setTimeline([]); setSelectedScheme(null); setSelectedCycles(null);
-    setTreatmentStart(""); setCouncilDate(""); setCouncilDecision(null); setPriorExams([]);
-  };
-
-  // ── STEP: SETUP ────────────────────────────────────────────────────────
-
+  // ── SETUP ──
   if (step === "setup") return (
     <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
       <div className="mb-10">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Трекер пути пациента</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Путь пациента</p>
         <h2 className="font-display text-4xl text-foreground mb-3">Решение консилиума</h2>
-        <p className="text-muted-foreground">Введите дату консилиума и выберите тактику лечения</p>
+        <p className="text-muted-foreground">Дата и тактика лечения</p>
       </div>
-      <div className="space-y-6">
+      <div className="space-y-5">
         <div className="bg-card border border-border rounded-2xl p-6">
           <p className="text-sm font-medium text-foreground mb-3">Дата консилиума</p>
           <input type="date" value={councilDate} onChange={e => setCouncilDate(e.target.value)} max={today}
-            className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20" />
+            className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20" />
         </div>
         <div className="bg-card border border-border rounded-2xl p-6">
           <p className="text-sm font-medium text-foreground mb-4">Решение консилиума</p>
           <div className="grid grid-cols-2 gap-3">
             {([
-              { key: "chemo", icon: "Syringe", label: "Химиотерапия", desc: "Системное лекарственное лечение" },
-              { key: "surgery", icon: "Stethoscope", label: "Хирургическое лечение", desc: "Оперативное вмешательство" },
-              { key: "radiation", icon: "Zap", label: "Лучевая терапия", desc: "Дистанционная или брахитерапия" },
-              { key: "diagnostics", icon: "Scan", label: "Дообследование", desc: "Уточнение диагноза" },
-            ] as { key: TreatmentType; icon: string; label: string; desc: string }[]).map(({ key, icon, label, desc }) => (
-              <button key={key as string} onClick={() => setCouncilDecision(key)}
-                className={`p-4 rounded-2xl border-2 text-left transition-all ${councilDecision === key ? "border-foreground bg-foreground/5" : "border-border hover:border-foreground/30 hover:bg-secondary"}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Icon name={icon as "Syringe"} size={16} className="text-foreground" />
-                  <span className="text-sm font-semibold text-foreground">{label}</span>
-                </div>
-                <p className="text-xs text-muted-foreground leading-tight">{desc}</p>
+              { key: "chemo", icon: "Syringe", label: "Химиотерапия" },
+              { key: "surgery", icon: "Stethoscope", label: "Хирургия" },
+              { key: "radiation", icon: "Zap", label: "Лучевая терапия" },
+              { key: "diagnostics", icon: "Scan", label: "Дообследование" },
+            ] as { key: TreatmentType; icon: string; label: string }[]).map(({ key, icon, label }) => (
+              <button key={key as string} onClick={() => setDecision(key)}
+                className={`p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-3 ${decision === key ? "border-foreground bg-foreground/5" : "border-border hover:border-foreground/30"}`}>
+                <Icon name={icon as "Syringe"} size={18} className="text-foreground" />
+                <span className="text-sm font-medium text-foreground">{label}</span>
               </button>
             ))}
           </div>
         </div>
-        <button disabled={!councilDate || !councilDecision} onClick={() => setStep("exams")}
+        <button disabled={!councilDate || !decision} onClick={() => setStep("treatment")}
           className="w-full py-3.5 bg-foreground text-background rounded-xl font-medium hover:opacity-85 transition-opacity disabled:opacity-40">
-          Далее — обследования до начала лечения
+          Далее
         </button>
       </div>
     </main>
   );
 
-  // ── STEP: EXAMS ────────────────────────────────────────────────────────
-
-  if (step === "exams") return (
+  // ── TREATMENT ──
+  if (step === "treatment") return (
     <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
       <button onClick={() => setStep("setup")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
         <Icon name="ChevronLeft" size={16} /> Назад
       </button>
       <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Шаг 2 из 3</p>
-        <h2 className="font-display text-4xl text-foreground mb-3">Обследования</h2>
-        <p className="text-muted-foreground">Добавьте инструментальные обследования до начала лечения — они войдут в контрольные точки плана.</p>
-      </div>
-      <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-        <p className="text-sm font-medium text-foreground mb-4">Добавить обследование</p>
-        <div className="flex gap-2 mb-4">
-          <input type="text" value={newExam} onChange={e => setNewExam(e.target.value)} onKeyDown={e => e.key === "Enter" && addExam()}
-            placeholder="Например: МРТ малого таза…"
-            className="flex-1 px-4 py-2.5 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20 placeholder:text-muted-foreground" />
-          <button onClick={addExam} disabled={!newExam.trim()}
-            className="px-4 py-2.5 bg-foreground text-background rounded-xl text-sm font-medium hover:opacity-85 transition-opacity disabled:opacity-40">
-            <Icon name="Plus" size={16} />
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {["МРТ малого таза", "КТ органов грудной клетки", "УЗИ брюшной полости", "Рентген грудной клетки", "Остеосцинтиграфия", "ПЭТ-КТ"].map(exam =>
-            !priorExams.includes(exam) && (
-              <button key={exam} onClick={() => setPriorExams(p => [...p, exam])}
-                className="text-xs px-3 py-1.5 border border-dashed border-border rounded-lg text-muted-foreground hover:border-foreground/40 hover:text-foreground transition-colors">
-                + {exam}
-              </button>
-            )
-          )}
-        </div>
-        {priorExams.length > 0 ? (
-          <div className="space-y-2">
-            {priorExams.map(exam => (
-              <div key={exam} className="flex items-center justify-between px-4 py-2.5 bg-secondary rounded-xl">
-                <div className="flex items-center gap-2">
-                  <Icon name="Scan" size={14} className="text-muted-foreground" />
-                  <span className="text-sm text-foreground">{exam}</span>
-                </div>
-                <button onClick={() => setPriorExams(p => p.filter(x => x !== exam))} className="text-muted-foreground hover:text-foreground transition-colors">
-                  <Icon name="X" size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-4 border border-dashed border-border rounded-xl">
-            Будут использованы стандартные методы: МРТ малого таза, рентген ОГК, УЗИ брюшной полости
-          </p>
-        )}
-      </div>
-      <button onClick={() => setStep("treatment")}
-        className="w-full py-3.5 bg-foreground text-background rounded-xl font-medium hover:opacity-85 transition-opacity">
-        Далее — параметры лечения
-      </button>
-    </main>
-  );
-
-  // ── STEP: TREATMENT ────────────────────────────────────────────────────
-
-  if (step === "treatment") return (
-    <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
-      <button onClick={() => setStep("exams")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
-        <Icon name="ChevronLeft" size={16} /> Назад
-      </button>
-      <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Шаг 3 из 3</p>
-        <h2 className="font-display text-4xl text-foreground mb-3">Параметры лечения</h2>
-        <p className="text-muted-foreground">Выберите схему, количество циклов и дату начала</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Параметры лечения</p>
+        <h2 className="font-display text-4xl text-foreground mb-2">Схема и сроки</h2>
       </div>
 
-      {councilDecision === "chemo" ? (
-        <div className="space-y-6">
+      {decision === "chemo" ? (
+        <div className="space-y-5">
           <div className="bg-card border border-border rounded-2xl p-6">
             <p className="text-sm font-medium text-foreground mb-4">Схема химиотерапии</p>
-            <div className="space-y-3">
-              {CHEMO_SCHEMES.map(scheme => (
-                <button key={scheme.id} onClick={() => { setSelectedScheme(scheme); setSelectedCycles(null); }}
-                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedScheme?.id === scheme.id ? "border-foreground bg-foreground/5" : "border-border hover:border-foreground/30"}`}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-foreground">{scheme.name}</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">{scheme.drug} · {scheme.dose} · каждые {scheme.cycleDays} дней</p>
-                    </div>
-                    {selectedScheme?.id === scheme.id && <Icon name="CheckCircle" size={18} className="text-foreground flex-shrink-0 mt-0.5" />}
+            {SCHEMES.map(s => (
+              <button key={s.id} onClick={() => { setScheme(s); setCycles(null); }}
+                className={`w-full p-4 rounded-xl border-2 text-left transition-all ${scheme?.id === s.id ? "border-foreground bg-foreground/5" : "border-border hover:border-foreground/30"}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-foreground">{s.name} <span className="font-normal text-muted-foreground">{s.dose}</span></p>
+                    <p className="text-xs text-muted-foreground mt-1">Каждые {s.cycleDays} дней · в/в капельно</p>
                   </div>
-                  <div className="flex gap-4 mt-3 pt-3 border-t border-border flex-wrap">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-blue-400" />
-                      <span className="text-xs text-muted-foreground">ОАК + биохимия перед каждым циклом</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-amber-400" />
-                      <span className="text-xs text-muted-foreground">ПСА после цикла {scheme.psaAfterCycle}</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  {scheme?.id === s.id && <Icon name="CheckCircle" size={18} className="text-foreground" />}
+                </div>
+              </button>
+            ))}
           </div>
 
-          {selectedScheme && (
+          {scheme && (
             <div className="bg-card border border-border rounded-2xl p-6">
               <p className="text-sm font-medium text-foreground mb-4">Количество циклов</p>
               <div className="flex gap-3">
-                {selectedScheme.cycleOptions.map(n => (
-                  <button key={n} onClick={() => setSelectedCycles(n)}
-                    className={`flex-1 py-4 rounded-xl border-2 font-semibold text-lg transition-all ${selectedCycles === n ? "border-foreground bg-foreground text-background" : "border-border text-foreground hover:border-foreground/40"}`}>
-                    {n} циклов
-                    <p className="text-xs font-normal mt-0.5 opacity-70">≈ {Math.round((n * selectedScheme.cycleDays) / 30)} мес.</p>
+                {scheme.cycleOptions.map(n => (
+                  <button key={n} onClick={() => setCycles(n)}
+                    className={`flex-1 py-4 rounded-xl border-2 text-center transition-all ${cycles === n ? "border-foreground bg-foreground text-background" : "border-border text-foreground hover:border-foreground/40"}`}>
+                    <p className="text-2xl font-display font-bold">{n}</p>
+                    <p className="text-xs mt-1 opacity-70">≈ {Math.round(n * scheme.cycleDays / 30)} мес.</p>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {selectedCycles && (
+          {cycles && (
             <div className="bg-card border border-border rounded-2xl p-6">
-              <p className="text-sm font-medium text-foreground mb-3">Дата начала лечения (цикл 1)</p>
-              <input type="date" value={treatmentStart} onChange={e => setTreatmentStart(e.target.value)}
-                className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20" />
+              <p className="text-sm font-medium text-foreground mb-3">Дата начала (цикл 1)</p>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20" />
             </div>
           )}
 
-          <button disabled={!selectedScheme || !selectedCycles || !treatmentStart} onClick={buildTimeline}
+          <button disabled={!scheme || !cycles || !startDate}
+            onClick={() => setStep("timeline")}
             className="w-full py-3.5 bg-foreground text-background rounded-xl font-medium hover:opacity-85 transition-opacity disabled:opacity-40">
-            Построить план лечения
+            Построить план
           </button>
         </div>
       ) : (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4">
-          <Icon name="Construction" size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold text-amber-900 mb-1">Раздел в разработке</p>
-            <p className="text-sm text-amber-700 leading-relaxed">Шаблоны для хирургического лечения, лучевой терапии и дообследования появятся в следующих версиях.</p>
-          </div>
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <Icon name="Construction" size={32} className="text-muted-foreground mx-auto mb-3" />
+          <p className="font-semibold text-foreground mb-2">Раздел в разработке</p>
+          <p className="text-sm text-muted-foreground">Шаблоны для хирургии, лучевой терапии и дообследования появятся в следующих версиях.</p>
         </div>
       )}
     </main>
   );
 
-  // ── STEP: TIMELINE ─────────────────────────────────────────────────────
-  // Horizontal SVG: time flows left → right, proportional to real days
-  // Labels above axis = diagnostics/labs (left side events)
-  // Labels below axis = treatment (right side events / cycles)
+  // ── TIMELINE ──
+  if (step === "timeline" && scheme && cycles && startDate) {
+    return (
+      <ChemoTimeline
+        scheme={scheme}
+        cycles={cycles}
+        startDate={new Date(startDate)}
+        onReset={reset}
+      />
+    );
+  }
 
-  // ── LANE Y-POSITIONS (each event type gets its own horizontal lane) ──
-  // Above axis (labs/exams) — 3 lanes stacked upward
-  // Below axis (treatment)  — 2 lanes stacked downward
-  //
-  //  imaging  ── lane Y = AXIS_Y - 230
-  //  psa      ── lane Y = AXIS_Y - 155
-  //  blood    ── lane Y = AXIS_Y - 80
-  //  ─────────────── AXIS ───────────────
-  //  cycle    ── lane Y = AXIS_Y + 80
-  //  (start/end labels inline on axis)
-
-  const AXIS_Y = 260;
-  const PX_PER_DAY = 9;
-  const PAD_LEFT = 60;
-  const PAD_RIGHT = 60;
-
-  const LANE: Record<string, number> = {
-    imaging: AXIS_Y - 230,
-    psa:     AXIS_Y - 155,
-    blood:   AXIS_Y - 80,
-    start:   AXIS_Y,
-    end:     AXIS_Y,
-    cycle:   AXIS_Y + 80,
-  };
-
-  const endEvent = timeline.find(e => e.id === "end");
-
-  // Sort events by date
-  const sorted = [...timeline].sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  if (sorted.length === 0) return null;
-
-  const t0 = sorted[0].date.getTime();
-  const tEnd = sorted[sorted.length - 1].date.getTime();
-  const totalDays = Math.max((tEnd - t0) / 86400000, 1);
-
-  const svgW = Math.max(PAD_LEFT + totalDays * PX_PER_DAY + PAD_RIGHT, 900);
-  const svgH = AXIS_Y + 80 + 80; // axis + cycle lane + padding
-
-  const dayX = (date: Date) => PAD_LEFT + ((date.getTime() - t0) / 86400000) * PX_PER_DAY;
-
-  // Color map
-  const COLOR: Record<string, string> = {
-    start:   "#6366f1",
-    end:     "#6366f1",
-    cycle:   "#a78bfa",
-    blood:   "#60a5fa",
-    psa:     "#fbbf24",
-    imaging: "#34d399",
-  };
-  const evColor = (ev: TimelineEvent) =>
-    ev.type === "psa" && ev.isControl ? "#fbbf24" : COLOR[ev.type] ?? "#6b7280";
-
-  // Dot radius
-  const dotR = (ev: TimelineEvent) => {
-    if (ev.type === "start" || ev.type === "end") return 9;
-    if (ev.type === "cycle") return 7;
-    return 5;
-  };
-
-  // Alternate labels: odd events above axis, even below — prevents overlap
-  // left-side (labs/exams) → always ABOVE axis
-  // right-side (cycles)    → always BELOW axis
-  // center (start/end)     → straddling
-
-  return (
-    <main className="w-full px-4 py-6 animate-fade-in overflow-hidden">
-
-      {/* Header */}
-      <div className="max-w-5xl mx-auto flex items-start justify-between gap-4 mb-5 flex-wrap">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Путь пациента</p>
-          <h2 className="font-display text-2xl text-foreground">
-            {selectedScheme?.name} · {selectedCycles} циклов · {selectedScheme?.dose}
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {formatDate(new Date(treatmentStart))}
-            {endEvent && ` — ${formatDate(endEvent.date)}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Progress ring */}
-          <div className="relative w-12 h-12 flex-shrink-0">
-            <svg width="48" height="48" className="-rotate-90">
-              <circle cx="24" cy="24" r="20" fill="none" stroke="hsl(var(--border))" strokeWidth="4" />
-              <circle cx="24" cy="24" r="20" fill="none" stroke="#6366f1" strokeWidth="4"
-                strokeDasharray={`${2 * Math.PI * 20}`}
-                strokeDashoffset={`${2 * Math.PI * 20 * (1 - progress / 100)}`}
-                strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.5s" }} />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-foreground">{progress}%</span>
-          </div>
-          <button onClick={resetAll}
-            className="px-3 py-2 border border-border rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-            Новый план
-          </button>
-        </div>
-      </div>
-
-      {/* Lane labels — left side legend */}
-      <div className="max-w-5xl mx-auto mb-3">
-        <div className="flex flex-wrap gap-4">
-          {[
-            { color: "#34d399", label: "Визуализация / МРТ" },
-            { color: "#fbbf24", label: "Контроль ПСА" },
-            { color: "#60a5fa", label: "Анализ крови" },
-            { color: "#6b7280", label: "Ось времени" },
-            { color: "#a78bfa", label: "Цикл ХТ" },
-          ].map(({ color, label }) => (
-            <div key={label} className="flex items-center gap-1.5">
-              <svg width="10" height="10"><circle cx="5" cy="5" r="4.5" fill={color} /></svg>
-              <span className="text-xs text-muted-foreground">{label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── HORIZONTAL SVG TIMELINE ── */}
-      <div className="overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
-        <svg width={svgW} height={svgH} style={{ display: "block", fontFamily: "inherit", minWidth: svgW }}>
-
-          {/* ── LANE GUIDE LINES (subtle horizontal rules per lane) ── */}
-          {(["imaging", "psa", "blood", "cycle"] as const).map(type => {
-            const y = LANE[type];
-            const laneColor = evColor({ type } as TimelineEvent);
-            return (
-              <line key={type}
-                x1={PAD_LEFT - 20} y1={y} x2={svgW - PAD_RIGHT + 20} y2={y}
-                stroke={laneColor} strokeWidth={1} strokeOpacity={0.1} strokeDasharray="4 6"
-              />
-            );
-          })}
-
-          {/* ── LANE LABELS on left ── */}
-          {([
-            { type: "imaging", label: "МРТ/КТ" },
-            { type: "psa",     label: "ПСА" },
-            { type: "blood",   label: "ОАК" },
-            { type: "cycle",   label: "Цикл" },
-          ] as const).map(({ type, label }) => {
-            const y = LANE[type];
-            const color = evColor({ type } as TimelineEvent);
-            return (
-              <text key={type} x={PAD_LEFT - 8} y={y} textAnchor="end" dominantBaseline="middle"
-                fontSize={9} fill={color} opacity={0.6} fontWeight="600" letterSpacing="0.05em">
-                {label}
-              </text>
-            );
-          })}
-
-          {/* ── MAIN AXIS LINE ── */}
-          <line
-            x1={PAD_LEFT - 20} y1={AXIS_Y}
-            x2={svgW - PAD_RIGHT + 20} y2={AXIS_Y}
-            stroke="hsl(var(--border))"
-            strokeWidth={3}
-            strokeLinecap="round"
-          />
-          {/* Arrow */}
-          <polygon
-            points={`${svgW - PAD_RIGHT + 22},${AXIS_Y} ${svgW - PAD_RIGHT + 13},${AXIS_Y - 5} ${svgW - PAD_RIGHT + 13},${AXIS_Y + 5}`}
-            fill="hsl(var(--muted-foreground))" opacity={0.35}
-          />
-
-          {/* ── COLORED SEGMENTS on axis between events (sorted by date) ── */}
-          {sorted.map((ev, i) => {
-            if (i === 0) return null;
-            const prev = sorted[i - 1];
-            const x1 = dayX(prev.date) + dotR(prev);
-            const x2 = dayX(ev.date) - dotR(ev);
-            if (x2 <= x1) return null;
-            return (
-              <line key={`seg-${i}`}
-                x1={x1} y1={AXIS_Y} x2={x2} y2={AXIS_Y}
-                stroke={evColor(ev)} strokeWidth={3} strokeOpacity={0.28} strokeLinecap="round"
-              />
-            );
-          })}
-
-          {/* ── MONTH TICKS ── */}
-          {(() => {
-            const marks: { x: number; label: string }[] = [];
-            const d = new Date(sorted[0].date.getFullYear(), sorted[0].date.getMonth(), 1);
-            const last = sorted[sorted.length - 1].date;
-            while (d <= last) {
-              marks.push({ x: dayX(d), label: d.toLocaleDateString("ru-RU", { month: "short" }) });
-              d.setMonth(d.getMonth() + 1);
-            }
-            return marks.map(({ x, label }) => (
-              <g key={label + x}>
-                <line x1={x} y1={AXIS_Y - 7} x2={x} y2={AXIS_Y + 7}
-                  stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeOpacity={0.3} />
-                <text x={x} y={AXIS_Y - 14} textAnchor="middle" fontSize={8}
-                  fill="hsl(var(--muted-foreground))" opacity={0.4}>{label}</text>
-              </g>
-            ));
-          })()}
-
-          {/* ── EVENTS ── */}
-          {sorted.map((ev) => {
-            const x = dayX(ev.date);
-            const color = evColor(ev);
-            const r = dotR(ev);
-            const done = completedIds.has(ev.id);
-            const isActive = activeId === ev.id;
-            const isCenter = ev.side === "center";
-
-            // Lane Y for this event type
-            const laneY = LANE[ev.type] ?? AXIS_Y;
-            const above = laneY <= AXIS_Y;
-
-            return (
-              <g key={ev.id} style={{ cursor: "pointer" }} onClick={() => setActiveId(isActive ? null : ev.id)}>
-
-                {/* Vertical connector: axis dot → lane dot */}
-                {!isCenter && (
-                  <line
-                    x1={x} y1={above ? AXIS_Y - r : AXIS_Y + r}
-                    x2={x} y2={laneY}
-                    stroke={color} strokeWidth={1.5} strokeDasharray="3 3"
-                    strokeOpacity={done ? 0.2 : 0.45}
-                  />
-                )}
-
-                {/* Axis dot (small tick for non-center) */}
-                {!isCenter && (
-                  <circle cx={x} cy={AXIS_Y} r={3}
-                    fill={color} opacity={done ? 0.3 : 0.7}
-                  />
-                )}
-
-                {/* Lane dot — glow ring */}
-                <circle cx={x} cy={laneY} r={r + 5} fill={color} opacity={isActive ? 0.15 : 0} />
-
-                {/* Lane dot */}
-                <circle cx={x} cy={laneY} r={r}
-                  fill={done ? "hsl(var(--muted-foreground))" : color}
-                  stroke={isActive ? color : "none"} strokeWidth={2}
-                  opacity={done ? 0.4 : 1}
-                />
-                {done && (
-                  <text x={x} y={laneY + 0.5} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={r - 1} fill="white" fontWeight="900">✓</text>
-                )}
-
-                {/* Label above/below lane dot */}
-                <text
-                  x={x}
-                  y={above ? laneY - 10 : laneY + 12}
-                  textAnchor="middle" dominantBaseline="middle"
-                  fontSize={isCenter ? 11 : 9}
-                  fontWeight={isCenter ? "700" : "500"}
-                  fill={done ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))"}
-                  opacity={done ? 0.4 : 1}
-                >
-                  {isCenter ? ev.label : formatDateShort(ev.date)}
-                </text>
-
-                {/* For center events: also show date below */}
-                {isCenter && (
-                  <text x={x} y={laneY + 14} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={8} fontFamily="monospace" fill={color} opacity={0.75}>
-                    {formatDateShort(ev.date)}
-                  </text>
-                )}
-
-                {/* Active popup */}
-                {isActive && (
-                  <foreignObject
-                    x={Math.min(x - 90, svgW - 200)}
-                    y={above ? laneY - 100 : laneY + 20}
-                    width={180} height={90}
-                  >
-                    <div style={{
-                      background: "hsl(var(--card))",
-                      border: `1px solid ${color}55`,
-                      borderRadius: 10,
-                      padding: "8px 12px",
-                      fontSize: 10,
-                      color: "hsl(var(--muted-foreground))",
-                      lineHeight: 1.5,
-                      boxShadow: `0 4px 20px ${color}25`,
-                    }}>
-                      <p style={{ fontWeight: 600, color: "hsl(var(--foreground))", marginBottom: 3 }}>{ev.label}</p>
-                      {ev.sublabel && <p style={{ marginBottom: 4 }}>{ev.sublabel}</p>}
-                      {ev.type === "blood" && <p>ОАК · АЛТ, АСТ · Билирубин · Креатинин</p>}
-                      {ev.type === "psa" && <p>Снижение ≥ 50% — биохимический ответ</p>}
-                      {ev.type === "imaging" && <p>Оценка по RECIST 1.1</p>}
-                      {ev.type === "cycle" && selectedScheme && <p>{selectedScheme.drug} · в/в 1 ч · Дексаметазон</p>}
-                      <button
-                        onClick={e2 => { e2.stopPropagation(); toggle(ev.id); }}
-                        style={{
-                          marginTop: 5, padding: "2px 8px", borderRadius: 6,
-                          border: `1px solid ${color}70`,
-                          background: done ? color + "25" : "transparent",
-                          color, fontSize: 9, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >{done ? "✓ Готово" : "Отметить"}</button>
-                    </div>
-                  </foreignObject>
-                )}
-              </g>
-            );
-          })}
-
-        </svg>
-      </div>
-
-    </main>
-  );
+  return null;
 }
