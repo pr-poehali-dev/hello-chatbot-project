@@ -93,6 +93,25 @@ const C = {
 // TIMELINE COMPONENT
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// SVG TIMELINE CONSTANTS
+// ─────────────────────────────────────────────────────────────
+
+const COL_W = 170;       // px per cycle column
+const PAD_L = 40;        // left padding
+const PAD_R = 80;        // right padding (for council dot)
+const AXIS_Y = 220;      // Y of main axis
+const BLOOD_Y = 60;      // Y of blood labels (above)
+const BLOOD_DOT_Y = 140; // Y of blood dots on axis-branch
+const PSA_Y = 340;       // Y of PSA/control labels (below)
+const PSA_DOT_Y = 300;   // Y of PSA dots on axis-branch
+const DOT_R = 22;        // cycle dot radius
+const SMALL_R = 7;       // small event dot radius
+const COUNCIL_R = 14;    // council dot radius
+
+// council — особый цвет (amber/gold)
+const COUNCIL_COLOR = "#f59e0b";
+
 function ChemoTimeline({
   scheme, cycles, startDate, onReset,
 }: {
@@ -113,20 +132,23 @@ function ChemoTimeline({
 
   const endDate = addDays(blocks[blocks.length - 1].infusionDate, scheme.cycleDays);
 
+  // SVG geometry
+  const svgW = PAD_L + blocks.length * COL_W + PAD_R;
+  const svgH = 480;
+  const cycleX = (num: number) => PAD_L + (num - 0.5) * COL_W;
+  const councilX = svgW - PAD_R / 2;
+
   return (
     <div className="w-full px-6 py-8 animate-fade-in">
 
       {/* ── HEADER ── */}
-      <div className="flex items-start justify-between gap-4 mb-2 flex-wrap max-w-6xl mx-auto">
+      <div className="flex items-start justify-between gap-4 mb-4 flex-wrap max-w-6xl mx-auto">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Химиотерапия</p>
           <h2 className="font-display text-3xl text-foreground">{scheme.name} {scheme.dose} · {cycles} циклов</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {fmt(startDate)} — {fmt(endDate)} · каждые {scheme.cycleDays} дней
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">{fmt(startDate)} — {fmt(endDate)} · каждые {scheme.cycleDays} дней</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Progress ring */}
           <div className="relative w-14 h-14">
             <svg width="56" height="56" className="-rotate-90">
               <circle cx="28" cy="28" r="22" fill="none" stroke="hsl(var(--border))" strokeWidth="4" />
@@ -144,12 +166,13 @@ function ChemoTimeline({
       </div>
 
       {/* ── LEGEND ── */}
-      <div className="flex flex-wrap gap-5 mb-8 max-w-6xl mx-auto">
+      <div className="flex flex-wrap gap-5 mb-6 max-w-6xl mx-auto">
         {[
-          { color: C.blood.dot,   label: "Анализы крови" },
-          { color: C.cycle.dot,   label: "Введение препарата" },
-          { color: C.psa.dot,     label: "Контроль ПСА" },
-          { color: C.imaging.dot, label: "Визуализация (МРТ/КТ)" },
+          { color: C.blood.dot,    label: "Анализы крови" },
+          { color: C.cycle.dot,    label: "Цикл ХТ" },
+          { color: C.psa.dot,      label: "Контроль ПСА" },
+          { color: C.imaging.dot,  label: "МРТ / КТ" },
+          { color: COUNCIL_COLOR,  label: "Консилиум" },
         ].map(l => (
           <div key={l.label} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: l.color }} />
@@ -158,217 +181,311 @@ function ChemoTimeline({
         ))}
       </div>
 
-      {/* ── TIMELINE SCROLL AREA ── */}
-      <div className="overflow-x-auto pb-4" style={{ scrollbarWidth: "thin" }}>
-        <div className="relative" style={{ minWidth: blocks.length * 160 + 80, paddingBottom: 8 }}>
+      {/* ── SVG TIMELINE ── */}
+      <div className="overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+        <svg
+          width={svgW} height={svgH}
+          style={{ display: "block", fontFamily: "inherit", overflow: "visible" }}
+        >
+          {/* ══ MAIN HORIZONTAL AXIS ══ */}
+          <line
+            x1={PAD_L - 16} y1={AXIS_Y} x2={svgW - 16} y2={AXIS_Y}
+            stroke="hsl(var(--border))" strokeWidth={3} strokeLinecap="round"
+          />
 
-          {/* ────── ROW: АНАЛИЗЫ КРОВИ (над осью, уровень 1) ────── */}
-          <div className="flex items-end mb-0" style={{ height: 90 }}>
-            <div style={{ width: 24 }} />
-            {blocks.map(b => {
-              const id = `blood-${b.num}`;
-              const isDone = done.has(id);
-              const isActive = active === id;
-              return (
-                <div key={id} style={{ width: 160 }} className="flex flex-col items-center">
-                  <button
-                    onClick={() => tap(id)}
-                    className="group flex flex-col items-center gap-1 w-full px-2"
-                  >
-                    <div className={`rounded-xl px-3 py-2 text-center transition-all border ${isActive ? "scale-105 shadow-lg" : "hover:scale-102"}`}
-                      style={{
-                        backgroundColor: isDone ? "hsl(var(--muted))" : C.blood.bg,
-                        borderColor: isDone ? "hsl(var(--border))" : C.blood.border,
-                        opacity: isDone ? 0.5 : 1,
-                      }}>
-                      <p className="text-xs font-semibold" style={{ color: isDone ? "hsl(var(--muted-foreground))" : C.blood.text }}>
-                        ОАК + биохимия
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: C.blood.dot, opacity: 0.8 }}>{fmt(b.bloodDate)}</p>
-                    </div>
-                  </button>
-                  {isActive && (
-                    <div className="absolute z-20 mt-1 rounded-xl border p-3 text-xs shadow-xl w-52"
-                      style={{ backgroundColor: "hsl(var(--card))", borderColor: C.blood.border, top: 0, marginLeft: 0 }}>
-                      <p className="font-semibold text-foreground mb-1">Анализы перед циклом {b.num}</p>
-                      <p className="text-muted-foreground mb-2">ОАК, лейкоформула, АЛТ/АСТ, билирубин, креатинин, глюкоза</p>
-                      <button onClick={() => toggle(id)}
-                        className="w-full py-1 rounded-lg text-xs font-semibold transition-colors"
-                        style={{ background: isDone ? C.blood.dot + "30" : C.blood.bg, color: C.blood.dot, border: `1px solid ${C.blood.border}` }}>
-                        {isDone ? "✓ Выполнено" : "Отметить выполненным"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {/* ══ PER-CYCLE ELEMENTS ══ */}
+          {blocks.map(b => {
+            const cx = cycleX(b.num);
+            const isLast = b.num === cycles;
+            const cycleId = `cycle-${b.num}`;
+            const bloodId = `blood-${b.num}`;
+            const psaId = `psa-${b.num}`;
+            const cycleDone = done.has(cycleId);
+            const bloodDone = done.has(bloodId);
+            const psaDone = done.has(psaId);
+            const cycleActive = active === cycleId;
+            const bloodActive = active === bloodId;
+            const psaActive = active === psaId;
+            const hasPsa = b.psaControl || b.fullControl;
+            const controlColor = b.fullControl ? C.imaging : C.psa;
 
-          {/* ────── CONNECTOR DOTS (верхний) ────── */}
-          <div className="flex items-center">
-            <div style={{ width: 24 }} />
-            {blocks.map(b => (
-              <div key={b.num} style={{ width: 160 }} className="flex justify-center">
-                <div className="w-0.5 h-5" style={{ backgroundColor: C.blood.dot, opacity: 0.4 }} />
-              </div>
-            ))}
-          </div>
+            return (
+              <g key={b.num}>
 
-          {/* ────── MAIN AXIS ROW ────── */}
-          <div className="flex items-center">
-            {/* Start cap */}
-            <div className="flex items-center" style={{ width: 24 }}>
-              <div className="w-6 h-1 rounded-full" style={{ backgroundColor: "hsl(var(--border))" }} />
-            </div>
+                {/* ── BLOOD: vertical line axis → blood dot ── */}
+                <line
+                  x1={cx} y1={AXIS_Y - DOT_R}
+                  x2={cx} y2={BLOOD_DOT_Y + SMALL_R}
+                  stroke={C.blood.dot} strokeWidth={1.5}
+                  strokeDasharray="4 3" strokeOpacity={bloodDone ? 0.25 : 0.5}
+                />
+                {/* Blood dot on branch */}
+                <circle cx={cx} cy={BLOOD_DOT_Y} r={SMALL_R}
+                  fill={bloodDone ? "hsl(var(--muted))" : C.blood.dot}
+                  opacity={bloodDone ? 0.4 : 1}
+                />
+                {/* Blood: clickable label area */}
+                <g style={{ cursor: "pointer" }} onClick={() => tap(bloodId)}>
+                  <rect
+                    x={cx - 52} y={BLOOD_Y - 26}
+                    width={104} height={48} rx={10}
+                    fill={bloodDone ? "hsl(var(--muted))" : C.blood.bg}
+                    stroke={bloodActive ? C.blood.dot : C.blood.border}
+                    strokeWidth={bloodActive ? 2 : 1}
+                    opacity={bloodDone ? 0.5 : 1}
+                  />
+                  <text x={cx} y={BLOOD_Y - 8} textAnchor="middle" fontSize={11} fontWeight="600"
+                    fill={bloodDone ? "hsl(var(--muted-foreground))" : C.blood.text}>
+                    ОАК + биохимия
+                  </text>
+                  <text x={cx} y={BLOOD_Y + 10} textAnchor="middle" fontSize={10}
+                    fill={C.blood.dot} opacity={bloodDone ? 0.4 : 0.85}>
+                    {fmt(b.bloodDate)}
+                  </text>
+                </g>
 
-            {blocks.map((b, i) => {
-              const id = `cycle-${b.num}`;
-              const isDone = done.has(id);
-              const isActive = active === id;
-              const isLast = i === blocks.length - 1;
-
-              return (
-                <div key={id} className="flex items-center" style={{ width: 160 }}>
-                  {/* Segment line before dot */}
-                  <div className="flex-1 h-1 rounded-full" style={{ backgroundColor: isDone ? C.cycle.dot + "40" : "hsl(var(--border))" }} />
-
-                  {/* Cycle dot + label */}
-                  <div className="relative flex flex-col items-center" style={{ zIndex: isActive ? 20 : 1 }}>
-                    <button
-                      onClick={() => tap(id)}
-                      className="flex flex-col items-center transition-transform hover:scale-110"
-                    >
-                      {/* Outer ring */}
-                      <div className="rounded-full flex items-center justify-center"
-                        style={{
-                          width: 48, height: 48,
-                          backgroundColor: isDone ? "hsl(var(--muted))" : C.cycle.bg,
-                          border: `2px solid ${isDone ? "hsl(var(--border))" : C.cycle.border}`,
-                          boxShadow: isActive ? `0 0 0 4px ${C.cycle.dot}30` : "none",
-                          opacity: isDone ? 0.5 : 1,
-                        }}>
-                        {isDone
-                          ? <Icon name="CheckCircle" size={20} style={{ color: C.cycle.dot }} />
-                          : <span className="font-display text-lg font-bold" style={{ color: C.cycle.text }}>{b.num}</span>
-                        }
-                      </div>
-                    </button>
-
-                    {/* Active popup */}
-                    {isActive && (
-                      <div className="absolute top-14 z-30 rounded-2xl border p-4 shadow-2xl w-56"
-                        style={{ backgroundColor: "hsl(var(--card))", borderColor: C.cycle.border }}>
-                        <p className="font-semibold text-foreground mb-1">Цикл {b.num} · {fmt(b.infusionDate)}</p>
-                        <p className="text-xs text-muted-foreground mb-1">{scheme.drug} {scheme.dose}</p>
-                        <p className="text-xs text-muted-foreground mb-3">В/в капельно, 1 ч · Премедикация: дексаметазон</p>
-                        <button onClick={() => toggle(id)}
-                          className="w-full py-1.5 rounded-xl text-xs font-semibold transition-colors"
-                          style={{ background: isDone ? C.cycle.dot + "30" : C.cycle.bg, color: C.cycle.dot, border: `1px solid ${C.cycle.border}` }}>
-                          {isDone ? "✓ Введение выполнено" : "Отметить введение"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Segment line after last dot */}
-                  {isLast && (
-                    <div className="flex-1 h-1 rounded-full" style={{ backgroundColor: "hsl(var(--border))" }} />
-                  )}
-                </div>
-              );
-            })}
-
-            {/* End cap */}
-            <div style={{ width: 24 }} className="flex items-center">
-              <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center"
-                style={{ borderColor: "#6366f1", backgroundColor: "#6366f115" }}>
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#6366f1" }} />
-              </div>
-            </div>
-          </div>
-
-          {/* Cycle date labels */}
-          <div className="flex items-start mt-1">
-            <div style={{ width: 24 }} />
-            {blocks.map(b => (
-              <div key={b.num} style={{ width: 160 }} className="flex justify-center">
-                <p className="text-xs font-mono text-center" style={{ color: C.cycle.dot, opacity: 0.7 }}>{fmt(b.infusionDate)}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* ────── CONNECTOR DOTS (нижний) для ПСА ────── */}
-          <div className="flex items-center mt-1">
-            <div style={{ width: 24 }} />
-            {blocks.map(b => (
-              <div key={b.num} style={{ width: 160 }} className="flex justify-center">
-                {(b.psaControl || b.fullControl) && (
-                  <div className="w-0.5 h-5" style={{ backgroundColor: b.fullControl ? C.imaging.dot : C.psa.dot, opacity: 0.4 }} />
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* ────── ROW: КОНТРОЛЬ ПСА ────── */}
-          <div className="flex items-start mt-0">
-            <div style={{ width: 24 }} />
-            {blocks.map(b => {
-              if (!b.psaControl && !b.fullControl) return <div key={b.num} style={{ width: 160 }} />;
-              const id = `psa-${b.num}`;
-              const isDone = done.has(id);
-              const isActive = active === id;
-              const color = b.fullControl ? C.imaging : C.psa;
-
-              return (
-                <div key={id} style={{ width: 160 }} className="flex flex-col items-center relative">
-                  <button onClick={() => tap(id)} className="w-full px-2">
-                    <div className="rounded-xl px-3 py-2.5 text-center border transition-all hover:scale-105"
-                      style={{
-                        backgroundColor: isDone ? "hsl(var(--muted))" : color.bg,
-                        borderColor: isDone ? "hsl(var(--border))" : color.border,
-                        opacity: isDone ? 0.5 : 1,
-                      }}>
-                      <p className="text-xs font-semibold" style={{ color: isDone ? "hsl(var(--muted-foreground))" : color.text }}>
+                {/* ── PSA / CONTROL ── */}
+                {hasPsa && (
+                  <>
+                    {/* vertical line axis → psa dot */}
+                    <line
+                      x1={cx} y1={AXIS_Y + DOT_R}
+                      x2={cx} y2={PSA_DOT_Y - SMALL_R}
+                      stroke={controlColor.dot} strokeWidth={1.5}
+                      strokeDasharray="4 3" strokeOpacity={psaDone ? 0.25 : 0.5}
+                    />
+                    {/* PSA dot on branch */}
+                    <circle cx={cx} cy={PSA_DOT_Y} r={SMALL_R + 1}
+                      fill={psaDone ? "hsl(var(--muted))" : controlColor.dot}
+                      opacity={psaDone ? 0.4 : 1}
+                    />
+                    {/* PSA clickable label */}
+                    <g style={{ cursor: "pointer" }} onClick={() => tap(psaId)}>
+                      <rect
+                        x={cx - 58} y={PSA_Y - 2}
+                        width={116} height={b.fullControl ? 54 : 44} rx={10}
+                        fill={psaDone ? "hsl(var(--muted))" : controlColor.bg}
+                        stroke={psaActive ? controlColor.dot : controlColor.border}
+                        strokeWidth={psaActive ? 2 : 1}
+                        opacity={psaDone ? 0.5 : 1}
+                      />
+                      <text x={cx} y={PSA_Y + 15} textAnchor="middle" fontSize={11} fontWeight="700"
+                        fill={psaDone ? "hsl(var(--muted-foreground))" : controlColor.text}>
                         {b.fullControl ? "Полный контроль" : "Контроль ПСА"}
-                      </p>
-                      {b.psaDate && <p className="text-xs mt-0.5" style={{ color: color.dot, opacity: 0.8 }}>{fmt(b.psaDate)}</p>}
-                      {b.fullControl && <p className="text-xs mt-0.5 opacity-60" style={{ color: color.text }}>ПСА + МРТ + КТ</p>}
-                    </div>
-                  </button>
+                      </text>
+                      {b.psaDate && (
+                        <text x={cx} y={PSA_Y + 31} textAnchor="middle" fontSize={10}
+                          fill={controlColor.dot} opacity={psaDone ? 0.4 : 0.85}>
+                          {fmt(b.psaDate)}
+                        </text>
+                      )}
+                      {b.fullControl && (
+                        <text x={cx} y={PSA_Y + 46} textAnchor="middle" fontSize={9}
+                          fill={controlColor.text} opacity={psaDone ? 0.3 : 0.65}>
+                          ПСА · МРТ · КТ
+                        </text>
+                      )}
+                    </g>
+                  </>
+                )}
 
-                  {isActive && (
-                    <div className="absolute top-16 z-30 rounded-2xl border p-4 shadow-2xl w-60"
-                      style={{ backgroundColor: "hsl(var(--card))", borderColor: color.border }}>
-                      <p className="font-semibold text-foreground mb-2">
-                        {b.fullControl ? `Полный контроль после цикла ${b.num}` : `Контроль ПСА после цикла ${b.num}`}
+                {/* ── CYCLE DOT on axis ── */}
+                {/* glow ring when active */}
+                <circle cx={cx} cy={AXIS_Y} r={DOT_R + 6}
+                  fill={C.cycle.dot} opacity={cycleActive ? 0.18 : 0}
+                  style={{ transition: "opacity 0.2s" }}
+                />
+                <g style={{ cursor: "pointer" }} onClick={() => tap(cycleId)}>
+                  <circle cx={cx} cy={AXIS_Y} r={DOT_R}
+                    fill={cycleDone ? "hsl(var(--muted))" : C.cycle.bg}
+                    stroke={cycleDone ? "hsl(var(--border))" : C.cycle.border}
+                    strokeWidth={2}
+                    opacity={cycleDone ? 0.5 : 1}
+                  />
+                  {cycleDone
+                    ? <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={16} fill={C.cycle.dot}>✓</text>
+                    : <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={15} fontWeight="700" fill={C.cycle.text}>{b.num}</text>
+                  }
+                </g>
+
+                {/* ── CYCLE LABEL below dot ── */}
+                <text x={cx} y={AXIS_Y + DOT_R + 16} textAnchor="middle" fontSize={10} fontWeight="600"
+                  fill="hsl(var(--foreground))" opacity={0.6}>
+                  {isLast ? `Цикл ${b.num} (посл.)` : `Цикл ${b.num}`}
+                </text>
+                <text x={cx} y={AXIS_Y + DOT_R + 30} textAnchor="middle" fontSize={9}
+                  fill={C.cycle.dot} opacity={0.6} fontFamily="monospace">
+                  {fmt(b.infusionDate)}
+                </text>
+
+              </g>
+            );
+          })}
+
+          {/* ══ COUNCIL DOT (последняя контрольная точка) ══ */}
+          {(() => {
+            const cx = councilX;
+            const councilId = "council";
+            const isDone = done.has(councilId);
+            const isActive = active === councilId;
+            return (
+              <g>
+                {/* axis extension to council */}
+                <line
+                  x1={cycleX(cycles) + DOT_R} y1={AXIS_Y}
+                  x2={cx - COUNCIL_R - 4} y2={AXIS_Y}
+                  stroke={COUNCIL_COLOR} strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.5}
+                />
+                {/* glow */}
+                <circle cx={cx} cy={AXIS_Y} r={COUNCIL_R + 8}
+                  fill={COUNCIL_COLOR} opacity={isActive ? 0.15 : 0}
+                  style={{ transition: "opacity 0.2s" }}
+                />
+                {/* outer pulse ring */}
+                <circle cx={cx} cy={AXIS_Y} r={COUNCIL_R + 3}
+                  fill="none" stroke={COUNCIL_COLOR} strokeWidth={1.5} strokeOpacity={0.35}
+                />
+                <g style={{ cursor: "pointer" }} onClick={() => tap(councilId)}>
+                  <circle cx={cx} cy={AXIS_Y} r={COUNCIL_R}
+                    fill={isDone ? "hsl(var(--muted))" : COUNCIL_COLOR + "22"}
+                    stroke={COUNCIL_COLOR} strokeWidth={2.5}
+                    opacity={isDone ? 0.5 : 1}
+                  />
+                  {isDone
+                    ? <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={14} fill={COUNCIL_COLOR}>✓</text>
+                    : <Icon name="Stethoscope" size={16} style={{ color: COUNCIL_COLOR }} />
+                  }
+                  {/* SVG doesn't support React components inline, draw icon as text symbol */}
+                  {!isDone && (
+                    <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={13} fill={COUNCIL_COLOR}>⊕</text>
+                  )}
+                </g>
+                <text x={cx} y={AXIS_Y + COUNCIL_R + 16} textAnchor="middle" fontSize={11} fontWeight="700"
+                  fill={COUNCIL_COLOR}>
+                  Консилиум
+                </text>
+                <text x={cx} y={AXIS_Y + COUNCIL_R + 30} textAnchor="middle" fontSize={9}
+                  fill={COUNCIL_COLOR} opacity={0.7} fontFamily="monospace">
+                  {fmt(endDate)}
+                </text>
+
+                {/* Active popup — rendered as foreignObject */}
+                {isActive && (
+                  <foreignObject x={cx - 110} y={AXIS_Y - 170} width={220} height={160}>
+                    <div style={{
+                      background: "hsl(var(--card))",
+                      border: `2px solid ${COUNCIL_COLOR}60`,
+                      borderRadius: 16,
+                      padding: "14px 16px",
+                      boxShadow: `0 8px 32px ${COUNCIL_COLOR}25`,
+                    }}>
+                      <p style={{ fontWeight: 700, fontSize: 13, color: COUNCIL_COLOR, marginBottom: 4 }}>Консилиум</p>
+                      <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", marginBottom: 8, lineHeight: 1.5 }}>
+                        Оценка результатов лечения. Решение о дальнейшей тактике на основании ПСА и данных визуализации.
                       </p>
-                      <div className="space-y-1 mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: C.psa.dot }} />
-                          <p className="text-xs text-muted-foreground">ПСА{b.psaDate ? ` · ${fmt(b.psaDate)}` : ""}</p>
-                        </div>
-                        {b.fullControl && b.imagingDates && ["МРТ малого таза", "КТ органов гр. клетки", "УЗИ брюшной полости"].map((exam, i) => (
-                          <div key={exam} className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: C.imaging.dot }} />
-                            <p className="text-xs text-muted-foreground">{exam}{b.imagingDates ? ` · ${fmt(b.imagingDates[i])}` : ""}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-3 italic">Снижение ПСА ≥ 50% — биохимический ответ</p>
-                      <button onClick={() => toggle(id)}
-                        className="w-full py-1.5 rounded-xl text-xs font-semibold"
-                        style={{ background: isDone ? color.dot + "30" : color.bg, color: color.dot, border: `1px solid ${color.border}` }}>
-                        {isDone ? "✓ Контроль выполнен" : "Отметить выполненным"}
+                      <button
+                        onClick={e => { e.stopPropagation(); toggle(councilId); }}
+                        style={{
+                          width: "100%", padding: "6px 0", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                          background: isDone ? COUNCIL_COLOR + "30" : COUNCIL_COLOR + "15",
+                          color: COUNCIL_COLOR, border: `1px solid ${COUNCIL_COLOR}60`, cursor: "pointer",
+                        }}>
+                        {isDone ? "✓ Консилиум проведён" : "Отметить проведённым"}
                       </button>
                     </div>
+                  </foreignObject>
+                )}
+              </g>
+            );
+          })()}
+
+        </svg>
+      </div>
+
+      {/* ── ACTIVE POPUPS for cycle / blood / psa (HTML, positioned) ── */}
+      {blocks.map(b => {
+        const cx = cycleX(b.num);
+        const cycleId = `cycle-${b.num}`;
+        const bloodId = `blood-${b.num}`;
+        const psaId = `psa-${b.num}`;
+        const controlColor = b.fullControl ? C.imaging : C.psa;
+
+        return (
+          <div key={b.num}>
+            {/* Cycle popup */}
+            {active === cycleId && (
+              <div className="fixed z-50 rounded-2xl border p-4 shadow-2xl w-60"
+                style={{
+                  backgroundColor: "hsl(var(--card))", borderColor: C.cycle.border,
+                  top: "50%", left: `calc(${cx}px + 48px)`, transform: "translateY(-50%)",
+                }}>
+                <p className="font-bold text-foreground mb-1">Цикл {b.num}</p>
+                <p className="text-xs text-muted-foreground mb-1">{scheme.drug} {scheme.dose}</p>
+                <p className="text-xs text-muted-foreground mb-3">В/в капельно, 1 ч · Дата: {fmt(b.infusionDate)}<br />Премедикация: дексаметазон</p>
+                <button onClick={() => toggle(cycleId)}
+                  className="w-full py-1.5 rounded-xl text-xs font-semibold"
+                  style={{ background: done.has(cycleId) ? C.cycle.dot + "30" : C.cycle.bg, color: C.cycle.dot, border: `1px solid ${C.cycle.border}` }}>
+                  {done.has(cycleId) ? "✓ Введение выполнено" : "Отметить введение"}
+                </button>
+              </div>
+            )}
+
+            {/* Blood popup */}
+            {active === bloodId && (
+              <div className="fixed z-50 rounded-2xl border p-4 shadow-2xl w-56"
+                style={{
+                  backgroundColor: "hsl(var(--card))", borderColor: C.blood.border,
+                  top: "30%", left: `calc(${cx}px + 36px)`, transform: "translateY(-50%)",
+                }}>
+                <p className="font-bold text-foreground mb-1">Анализы перед циклом {b.num}</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  ОАК с лейкоформулой<br />АЛТ, АСТ, билирубин, креатинин, глюкоза<br />
+                  Дата: {fmt(b.bloodDate)}
+                </p>
+                <button onClick={() => toggle(bloodId)}
+                  className="w-full py-1.5 rounded-xl text-xs font-semibold"
+                  style={{ background: done.has(bloodId) ? C.blood.dot + "30" : C.blood.bg, color: C.blood.dot, border: `1px solid ${C.blood.border}` }}>
+                  {done.has(bloodId) ? "✓ Выполнено" : "Отметить выполненным"}
+                </button>
+              </div>
+            )}
+
+            {/* PSA / Control popup */}
+            {active === psaId && (b.psaControl || b.fullControl) && (
+              <div className="fixed z-50 rounded-2xl border p-4 shadow-2xl w-64"
+                style={{
+                  backgroundColor: "hsl(var(--card))", borderColor: controlColor.border,
+                  top: "65%", left: `calc(${cx}px + 36px)`, transform: "translateY(-50%)",
+                }}>
+                <p className="font-bold text-foreground mb-2">
+                  {b.fullControl ? `Полный контроль после цикла ${b.num}` : `Контроль ПСА после цикла ${b.num}`}
+                </p>
+                <div className="space-y-1.5 mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: C.psa.dot }} />
+                    <p className="text-xs text-muted-foreground">ПСА{b.psaDate ? ` · ${fmt(b.psaDate)}` : ""}</p>
+                  </div>
+                  {b.fullControl && b.imagingDates && (
+                    ["МРТ малого таза", "КТ органов гр. клетки", "УЗИ брюшной полости"].map((exam, i) => (
+                      <div key={exam} className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: C.imaging.dot }} />
+                        <p className="text-xs text-muted-foreground">{exam}{b.imagingDates ? ` · ${fmt(b.imagingDates[i])}` : ""}</p>
+                      </div>
+                    ))
                   )}
                 </div>
-              );
-            })}
+                <p className="text-xs text-muted-foreground italic mb-3">Снижение ПСА ≥ 50% — биохимический ответ</p>
+                <button onClick={() => toggle(psaId)}
+                  className="w-full py-1.5 rounded-xl text-xs font-semibold"
+                  style={{ background: done.has(psaId) ? controlColor.dot + "30" : controlColor.bg, color: controlColor.dot, border: `1px solid ${controlColor.border}` }}>
+                  {done.has(psaId) ? "✓ Контроль выполнен" : "Отметить выполненным"}
+                </button>
+              </div>
+            )}
           </div>
+        );
+      })}
 
-        </div>
-      </div>
     </div>
   );
 }
