@@ -98,17 +98,17 @@ const C = {
 // SVG TIMELINE CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
-const PX_PER_DAY = 18;   // масштаб: пикселей на один день
-const PAD_L = 60;
-const PAD_R = 100;       // правый отступ (консилиум)
-const AXIS_Y = 210;      // Y горизонтальной оси
-const BLOOD_LABEL_Y = 48;   // Y подписи ОАК (над осью)
-const BLOOD_DOT_Y   = 140;  // Y точки ОАК на бранче
-const PSA_DOT_Y     = 288;  // Y точки ПСА/контроля на бранче
-const PSA_LABEL_Y   = 360;  // Y подписи ПСА (под осью)
-const DOT_R   = 22;     // радиус кружка цикла
-const SMALL_R = 7;      // радиус малой точки
-const COUNCIL_R = 14;
+const PX_PER_DAY = 14;   // масштаб: пикселей на один день
+const PAD_L = 48;
+const PAD_R = 90;
+const AXIS_Y = 160;         // Y горизонтальной оси
+const BLOOD_LABEL_Y = 30;   // Y подписи ОАК (над осью)
+const BLOOD_DOT_Y   = 100;  // Y точки ОАК
+const PSA_DOT_Y     = 224;  // Y точки ПСА
+const PSA_LABEL_Y   = 268;  // Y подписи ПСА (под осью)
+const DOT_R   = 20;
+const SMALL_R = 6;
+const COUNCIL_R = 13;
 
 const COUNCIL_COLOR = "#f59e0b";
 
@@ -136,16 +136,16 @@ function ChemoTimeline({
   const t0 = startDate.getTime();
   const dateToX = (d: Date) => PAD_L + ((d.getTime() - t0) / 86400000) * PX_PER_DAY;
 
-  const totalDays = (endDate.getTime() - t0) / 86400000 + 7; // +7 для хвоста
+  const totalDays = (endDate.getTime() - t0) / 86400000 + 7;
   const svgW = PAD_L + totalDays * PX_PER_DAY + PAD_R;
-  const svgH = 480;
+  const svgH = PSA_LABEL_Y + 60; // компактная высота
   const councilX = svgW - PAD_R / 2;
 
   return (
     <div className="w-full px-6 py-8 animate-fade-in">
 
       {/* ── HEADER ── */}
-      <div className="flex items-start justify-between gap-4 mb-4 flex-wrap max-w-6xl mx-auto">
+      <div className="flex items-start justify-between gap-4 mb-3 flex-wrap max-w-6xl mx-auto">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Химиотерапия</p>
           <h2 className="font-display text-3xl text-foreground">{scheme.name} {scheme.dose} · {cycles} циклов</h2>
@@ -169,7 +169,7 @@ function ChemoTimeline({
       </div>
 
       {/* ── LEGEND ── */}
-      <div className="flex flex-wrap gap-5 mb-6 max-w-6xl mx-auto">
+      <div className="flex flex-wrap gap-4 mb-4 max-w-6xl mx-auto">
         {[
           { color: C.blood.dot,    label: "Анализы крови" },
           { color: C.cycle.dot,    label: "Цикл ХТ" },
@@ -479,38 +479,73 @@ export default function PatientJourney() {
 
   // ── SETUP ──
   if (step === "setup") return (
-    <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
-      <div className="mb-10">
+    <main className="max-w-xl mx-auto px-5 py-10 animate-fade-in">
+      <div className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Путь пациента</p>
-        <h2 className="font-display text-4xl text-foreground mb-3">Решение консилиума</h2>
-        <p className="text-muted-foreground">Дата и тактика лечения</p>
+        <h2 className="font-display text-3xl text-foreground mb-1">Решение консилиума</h2>
+        <p className="text-sm text-muted-foreground">Дата и тактика лечения</p>
       </div>
-      <div className="space-y-5">
-        <div className="bg-card border border-border rounded-2xl p-6">
-          <p className="text-sm font-medium text-foreground mb-3">Дата консилиума</p>
-          <input type="date" value={councilDate} onChange={e => setCouncilDate(e.target.value)} max={today}
-            className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20" />
+      <div className="space-y-4">
+        {/* Дата консилиума — красивый пикер */}
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Дата консилиума</p>
+          <label className="flex items-center gap-4 cursor-pointer group">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors"
+              style={{ backgroundColor: councilDate ? "#6366f118" : "hsl(var(--secondary))", border: `2px solid ${councilDate ? "#6366f160" : "hsl(var(--border))"}` }}>
+              <Icon name="CalendarDays" size={20} style={{ color: councilDate ? "#818cf8" : "hsl(var(--muted-foreground))" }} />
+            </div>
+            <div className="flex-1">
+              {councilDate
+                ? <p className="font-semibold text-foreground text-lg">{new Date(councilDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</p>
+                : <p className="text-muted-foreground">Выберите дату</p>
+              }
+              <p className="text-xs text-muted-foreground mt-0.5">Нажмите чтобы выбрать</p>
+            </div>
+            <input type="date" value={councilDate} onChange={e => setCouncilDate(e.target.value)} max={today}
+              className="absolute opacity-0 w-0 h-0 pointer-events-none" tabIndex={-1} />
+            <div className="px-3 py-1.5 rounded-xl border border-border text-xs text-muted-foreground group-hover:text-foreground group-hover:border-foreground/30 transition-all">
+              Изменить
+            </div>
+          </label>
+          {/* Скрытый нативный инпут, открываем кликом по кнопке */}
+          <input id="council-date-input" type="date" value={councilDate}
+            onChange={e => setCouncilDate(e.target.value)} max={today}
+            className="mt-3 w-full px-4 py-2.5 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer" />
         </div>
-        <div className="bg-card border border-border rounded-2xl p-6">
-          <p className="text-sm font-medium text-foreground mb-4">Решение консилиума</p>
-          <div className="grid grid-cols-2 gap-3">
+
+        {/* Решение консилиума */}
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Решение консилиума</p>
+          <div className="grid grid-cols-2 gap-2">
             {([
-              { key: "chemo", icon: "Syringe", label: "Химиотерапия" },
-              { key: "surgery", icon: "Stethoscope", label: "Хирургия" },
-              { key: "radiation", icon: "Zap", label: "Лучевая терапия" },
-              { key: "diagnostics", icon: "Scan", label: "Дообследование" },
-            ] as { key: TreatmentType; icon: string; label: string }[]).map(({ key, icon, label }) => (
-              <button key={key as string} onClick={() => setDecision(key)}
-                className={`p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-3 ${decision === key ? "border-foreground bg-foreground/5" : "border-border hover:border-foreground/30"}`}>
-                <Icon name={icon as "Syringe"} size={18} className="text-foreground" />
-                <span className="text-sm font-medium text-foreground">{label}</span>
-              </button>
-            ))}
+              { key: "chemo",       icon: "Syringe",      label: "Химиотерапия",    color: "#a78bfa" },
+              { key: "surgery",     icon: "Stethoscope",  label: "Хирургия",        color: "#60a5fa" },
+              { key: "radiation",   icon: "Zap",          label: "Лучевая терапия", color: "#34d399" },
+              { key: "diagnostics", icon: "Scan",         label: "Дообследование",  color: "#fbbf24" },
+            ] as { key: TreatmentType; icon: string; label: string; color: string }[]).map(({ key, icon, label, color }) => {
+              const active = decision === key;
+              return (
+                <button key={key as string} onClick={() => setDecision(key)}
+                  className="p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-3 active:scale-95"
+                  style={{
+                    borderColor: active ? color + "80" : "hsl(var(--border))",
+                    backgroundColor: active ? color + "12" : "hsl(var(--secondary))",
+                    boxShadow: active ? `0 0 0 1px ${color}40` : "none",
+                  }}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: active ? color + "25" : "hsl(var(--border))" }}>
+                    <Icon name={icon as "Syringe"} size={17} style={{ color: active ? color : "hsl(var(--muted-foreground))" }} />
+                  </div>
+                  <span className="text-sm font-medium" style={{ color: active ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))" }}>{label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
+
         <button disabled={!councilDate || !decision} onClick={() => setStep("treatment")}
-          className="w-full py-3.5 bg-foreground text-background rounded-xl font-medium hover:opacity-85 transition-opacity disabled:opacity-40">
-          Далее
+          className="w-full py-3.5 bg-foreground text-background rounded-2xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+          Далее →
         </button>
       </div>
     </main>
@@ -518,60 +553,97 @@ export default function PatientJourney() {
 
   // ── TREATMENT ──
   if (step === "treatment") return (
-    <main className="max-w-2xl mx-auto px-6 py-12 animate-fade-in">
-      <button onClick={() => setStep("setup")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
-        <Icon name="ChevronLeft" size={16} /> Назад
+    <main className="max-w-xl mx-auto px-5 py-10 animate-fade-in">
+      <button onClick={() => setStep("setup")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
+        <Icon name="ChevronLeft" size={15} /> Назад
       </button>
-      <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Параметры лечения</p>
-        <h2 className="font-display text-4xl text-foreground mb-2">Схема и сроки</h2>
+      <div className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Параметры лечения</p>
+        <h2 className="font-display text-3xl text-foreground">Схема и сроки</h2>
       </div>
 
       {decision === "chemo" ? (
-        <div className="space-y-5">
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <p className="text-sm font-medium text-foreground mb-4">Схема химиотерапии</p>
-            {SCHEMES.map(s => (
-              <button key={s.id} onClick={() => { setScheme(s); setCycles(null); }}
-                className={`w-full p-4 rounded-xl border-2 text-left transition-all ${scheme?.id === s.id ? "border-foreground bg-foreground/5" : "border-border hover:border-foreground/30"}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-foreground">{s.name} <span className="font-normal text-muted-foreground">{s.dose}</span></p>
-                    <p className="text-xs text-muted-foreground mt-1">Каждые {s.cycleDays} дней · в/в капельно</p>
+        <div className="space-y-4">
+          {/* Схема */}
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Схема химиотерапии</p>
+            {SCHEMES.map(s => {
+              const sel = scheme?.id === s.id;
+              return (
+                <button key={s.id} onClick={() => { setScheme(s); setCycles(null); }}
+                  className="w-full p-4 rounded-xl border-2 text-left transition-all active:scale-[0.99] flex items-center gap-4"
+                  style={{
+                    borderColor: sel ? "#a78bfa80" : "hsl(var(--border))",
+                    backgroundColor: sel ? "#a78bfa0e" : "hsl(var(--secondary))",
+                  }}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: sel ? "#a78bfa20" : "hsl(var(--border))" }}>
+                    <Icon name="Syringe" size={18} style={{ color: sel ? "#a78bfa" : "hsl(var(--muted-foreground))" }} />
                   </div>
-                  {scheme?.id === s.id && <Icon name="CheckCircle" size={18} className="text-foreground" />}
-                </div>
-              </button>
-            ))}
+                  <div className="flex-1">
+                    <p className="font-semibold text-foreground">{s.name} <span className="font-normal text-muted-foreground text-sm">{s.dose}</span></p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Каждые {s.cycleDays} дней · в/в капельно · 1 ч</p>
+                  </div>
+                  {sel && <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#a78bfa" }}>
+                    <Icon name="Check" size={12} style={{ color: "white" }} />
+                  </div>}
+                </button>
+              );
+            })}
           </div>
 
+          {/* Циклы */}
           {scheme && (
-            <div className="bg-card border border-border rounded-2xl p-6">
-              <p className="text-sm font-medium text-foreground mb-4">Количество циклов</p>
+            <div className="bg-card border border-border rounded-2xl p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Количество циклов</p>
               <div className="flex gap-3">
-                {scheme.cycleOptions.map(n => (
-                  <button key={n} onClick={() => setCycles(n)}
-                    className={`flex-1 py-4 rounded-xl border-2 text-center transition-all ${cycles === n ? "border-foreground bg-foreground text-background" : "border-border text-foreground hover:border-foreground/40"}`}>
-                    <p className="text-2xl font-display font-bold">{n}</p>
-                    <p className="text-xs mt-1 opacity-70">≈ {Math.round(n * scheme.cycleDays / 30)} мес.</p>
-                  </button>
-                ))}
+                {scheme.cycleOptions.map(n => {
+                  const sel = cycles === n;
+                  return (
+                    <button key={n} onClick={() => setCycles(n)}
+                      className="flex-1 py-5 rounded-2xl border-2 text-center transition-all active:scale-95"
+                      style={{
+                        borderColor: sel ? "#a78bfa" : "hsl(var(--border))",
+                        backgroundColor: sel ? "#a78bfa" : "hsl(var(--secondary))",
+                        boxShadow: sel ? "0 4px 20px #a78bfa40" : "none",
+                      }}>
+                      <p className="text-3xl font-display font-bold" style={{ color: sel ? "white" : "hsl(var(--foreground))" }}>{n}</p>
+                      <p className="text-xs mt-1" style={{ color: sel ? "rgba(255,255,255,0.75)" : "hsl(var(--muted-foreground))" }}>
+                        ≈ {Math.round(n * scheme.cycleDays / 30)} мес.
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
+          {/* Дата начала */}
           {cycles && (
-            <div className="bg-card border border-border rounded-2xl p-6">
-              <p className="text-sm font-medium text-foreground mb-3">Дата начала (цикл 1)</p>
+            <div className="bg-card border border-border rounded-2xl p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Дата начала (цикл 1)</p>
+              <label className="flex items-center gap-4 cursor-pointer mb-3">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: startDate ? "#6366f118" : "hsl(var(--secondary))", border: `2px solid ${startDate ? "#6366f160" : "hsl(var(--border))"}` }}>
+                  <Icon name="CalendarDays" size={20} style={{ color: startDate ? "#818cf8" : "hsl(var(--muted-foreground))" }} />
+                </div>
+                <div className="flex-1">
+                  {startDate
+                    ? <p className="font-semibold text-foreground text-lg">{new Date(startDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</p>
+                    : <p className="text-muted-foreground">Выберите дату</p>
+                  }
+                  <p className="text-xs text-muted-foreground mt-0.5">День первого введения препарата</p>
+                </div>
+              </label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                className="w-full px-4 py-3 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20" />
+                className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer" />
             </div>
           )}
 
           <button disabled={!scheme || !cycles || !startDate}
             onClick={() => setStep("timeline")}
-            className="w-full py-3.5 bg-foreground text-background rounded-xl font-medium hover:opacity-85 transition-opacity disabled:opacity-40">
-            Построить план
+            className="w-full py-3.5 bg-foreground text-background rounded-2xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+            Построить план →
           </button>
         </div>
       ) : (
