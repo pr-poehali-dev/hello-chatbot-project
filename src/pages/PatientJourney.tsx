@@ -98,19 +98,18 @@ const C = {
 // SVG TIMELINE CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
-const COL_W = 170;       // px per cycle column
-const PAD_L = 40;        // left padding
-const PAD_R = 80;        // right padding (for council dot)
-const AXIS_Y = 220;      // Y of main axis
-const BLOOD_Y = 60;      // Y of blood labels (above)
-const BLOOD_DOT_Y = 140; // Y of blood dots on axis-branch
-const PSA_Y = 340;       // Y of PSA/control labels (below)
-const PSA_DOT_Y = 300;   // Y of PSA dots on axis-branch
-const DOT_R = 22;        // cycle dot radius
-const SMALL_R = 7;       // small event dot radius
-const COUNCIL_R = 14;    // council dot radius
+const PX_PER_DAY = 18;   // масштаб: пикселей на один день
+const PAD_L = 60;
+const PAD_R = 100;       // правый отступ (консилиум)
+const AXIS_Y = 210;      // Y горизонтальной оси
+const BLOOD_LABEL_Y = 48;   // Y подписи ОАК (над осью)
+const BLOOD_DOT_Y   = 140;  // Y точки ОАК на бранче
+const PSA_DOT_Y     = 288;  // Y точки ПСА/контроля на бранче
+const PSA_LABEL_Y   = 360;  // Y подписи ПСА (под осью)
+const DOT_R   = 22;     // радиус кружка цикла
+const SMALL_R = 7;      // радиус малой точки
+const COUNCIL_R = 14;
 
-// council — особый цвет (amber/gold)
 const COUNCIL_COLOR = "#f59e0b";
 
 function ChemoTimeline({
@@ -133,10 +132,13 @@ function ChemoTimeline({
 
   const endDate = addDays(blocks[blocks.length - 1].infusionDate, scheme.cycleDays);
 
-  // SVG geometry
-  const svgW = PAD_L + blocks.length * COL_W + PAD_R;
+  // SVG geometry — пропорциональная ось: X = f(date)
+  const t0 = startDate.getTime();
+  const dateToX = (d: Date) => PAD_L + ((d.getTime() - t0) / 86400000) * PX_PER_DAY;
+
+  const totalDays = (endDate.getTime() - t0) / 86400000 + 7; // +7 для хвоста
+  const svgW = PAD_L + totalDays * PX_PER_DAY + PAD_R;
   const svgH = 480;
-  const cycleX = (num: number) => PAD_L + (num - 0.5) * COL_W;
   const councilX = svgW - PAD_R / 2;
 
   return (
@@ -190,99 +192,92 @@ function ChemoTimeline({
         >
           {/* ══ MAIN HORIZONTAL AXIS ══ */}
           <line
-            x1={PAD_L - 16} y1={AXIS_Y} x2={svgW - 16} y2={AXIS_Y}
+            x1={PAD_L - 16} y1={AXIS_Y} x2={svgW - PAD_R + 20} y2={AXIS_Y}
             stroke="hsl(var(--border))" strokeWidth={3} strokeLinecap="round"
           />
 
           {/* ══ PER-CYCLE ELEMENTS ══ */}
           {blocks.map(b => {
-            const cx = cycleX(b.num);
+            const cx      = dateToX(b.infusionDate);  // цикл — на своей дате
+            const bx      = dateToX(b.bloodDate);     // ОАК  — на своей дате (за 4 дня)
+            const px      = b.psaDate ? dateToX(b.psaDate) : null; // ПСА  — после цикла
+
             const isLast = b.num === cycles;
             const cycleId = `cycle-${b.num}`;
             const bloodId = `blood-${b.num}`;
-            const psaId = `psa-${b.num}`;
-            const cycleDone = done.has(cycleId);
-            const bloodDone = done.has(bloodId);
-            const psaDone = done.has(psaId);
+            const psaId   = `psa-${b.num}`;
+            const cycleDone  = done.has(cycleId);
+            const bloodDone  = done.has(bloodId);
+            const psaDone    = done.has(psaId);
             const cycleActive = active === cycleId;
             const bloodActive = active === bloodId;
-            const psaActive = active === psaId;
+            const psaActive   = active === psaId;
             const hasPsa = b.psaControl || b.fullControl;
             const controlColor = b.fullControl ? C.imaging : C.psa;
 
             return (
               <g key={b.num}>
 
-                {/* ── BLOOD: vertical line axis → blood dot ── */}
-                <line
-                  x1={cx} y1={AXIS_Y - DOT_R}
-                  x2={cx} y2={BLOOD_DOT_Y + SMALL_R}
-                  stroke={C.blood.dot} strokeWidth={1.5}
-                  strokeDasharray="4 3" strokeOpacity={bloodDone ? 0.25 : 0.5}
-                />
-                {/* Blood dot on branch */}
-                <circle cx={cx} cy={BLOOD_DOT_Y} r={SMALL_R}
+                {/* ── BLOOD (над осью, на дате ОАК) ── */}
+                {/* вертикальная линия ось → точка */}
+                <line x1={bx} y1={AXIS_Y - 3} x2={bx} y2={BLOOD_DOT_Y + SMALL_R}
+                  stroke={C.blood.dot} strokeWidth={1.5} strokeDasharray="4 3"
+                  strokeOpacity={bloodDone ? 0.2 : 0.5} />
+                {/* точка */}
+                <circle cx={bx} cy={BLOOD_DOT_Y} r={SMALL_R} fill="hsl(var(--card))" />
+                <circle cx={bx} cy={BLOOD_DOT_Y} r={SMALL_R}
                   fill={bloodDone ? "hsl(var(--muted))" : C.blood.dot}
-                  opacity={bloodDone ? 0.4 : 1}
-                />
-                {/* Blood: clickable label area */}
+                  opacity={bloodDone ? 0.4 : 1} />
+                {/* маленький тик на оси */}
+                <line x1={bx} y1={AXIS_Y - 3} x2={bx} y2={AXIS_Y + 3}
+                  stroke={C.blood.dot} strokeWidth={2} strokeOpacity={bloodDone ? 0.3 : 0.7} />
+                {/* плашка */}
                 <g style={{ cursor: "pointer" }} onClick={() => tap(bloodId)}>
-                  <rect
-                    x={cx - 52} y={BLOOD_Y - 26}
-                    width={104} height={48} rx={10}
+                  <rect x={bx - 50} y={BLOOD_LABEL_Y - 22} width={100} height={46} rx={10}
                     fill={bloodDone ? "hsl(var(--muted))" : C.blood.bg}
                     stroke={bloodActive ? C.blood.dot : C.blood.border}
-                    strokeWidth={bloodActive ? 2 : 1}
-                    opacity={bloodDone ? 0.5 : 1}
-                  />
-                  <text x={cx} y={BLOOD_Y - 8} textAnchor="middle" fontSize={11} fontWeight="600"
+                    strokeWidth={bloodActive ? 2 : 1} opacity={bloodDone ? 0.5 : 1} />
+                  <text x={bx} y={BLOOD_LABEL_Y - 5} textAnchor="middle" fontSize={10} fontWeight="600"
                     fill={bloodDone ? "hsl(var(--muted-foreground))" : C.blood.text}>
                     ОАК + биохимия
                   </text>
-                  <text x={cx} y={BLOOD_Y + 10} textAnchor="middle" fontSize={10}
+                  <text x={bx} y={BLOOD_LABEL_Y + 11} textAnchor="middle" fontSize={9}
                     fill={C.blood.dot} opacity={bloodDone ? 0.4 : 0.85}>
                     {fmt(b.bloodDate)}
                   </text>
                 </g>
 
-                {/* ── PSA / CONTROL ── */}
-                {hasPsa && (
+                {/* ── PSA / КОНТРОЛЬ (под осью, на дате ПСА) ── */}
+                {hasPsa && px !== null && (
                   <>
-                    {/* vertical line axis → psa dot */}
-                    <line
-                      x1={cx} y1={AXIS_Y + DOT_R}
-                      x2={cx} y2={PSA_DOT_Y - SMALL_R}
-                      stroke={controlColor.dot} strokeWidth={1.5}
-                      strokeDasharray="4 3" strokeOpacity={psaDone ? 0.25 : 0.5}
-                    />
-                    {/* PSA dot on branch */}
-                    <circle cx={cx} cy={PSA_DOT_Y} r={SMALL_R + 1}
+                    <line x1={px} y1={AXIS_Y + 3} x2={px} y2={PSA_DOT_Y - SMALL_R - 1}
+                      stroke={controlColor.dot} strokeWidth={1.5} strokeDasharray="4 3"
+                      strokeOpacity={psaDone ? 0.2 : 0.5} />
+                    {/* тик на оси */}
+                    <line x1={px} y1={AXIS_Y - 3} x2={px} y2={AXIS_Y + 3}
+                      stroke={controlColor.dot} strokeWidth={2} strokeOpacity={psaDone ? 0.3 : 0.7} />
+                    {/* точка */}
+                    <circle cx={px} cy={PSA_DOT_Y} r={SMALL_R + 1} fill="hsl(var(--card))" />
+                    <circle cx={px} cy={PSA_DOT_Y} r={SMALL_R + 1}
                       fill={psaDone ? "hsl(var(--muted))" : controlColor.dot}
-                      opacity={psaDone ? 0.4 : 1}
-                    />
-                    {/* PSA clickable label */}
+                      opacity={psaDone ? 0.4 : 1} />
+                    {/* плашка */}
                     <g style={{ cursor: "pointer" }} onClick={() => tap(psaId)}>
-                      <rect
-                        x={cx - 58} y={PSA_Y - 2}
-                        width={116} height={b.fullControl ? 54 : 44} rx={10}
+                      <rect x={px - 56} y={PSA_LABEL_Y - 4} width={112} height={b.fullControl ? 56 : 44} rx={10}
                         fill={psaDone ? "hsl(var(--muted))" : controlColor.bg}
                         stroke={psaActive ? controlColor.dot : controlColor.border}
-                        strokeWidth={psaActive ? 2 : 1}
-                        opacity={psaDone ? 0.5 : 1}
-                      />
-                      <text x={cx} y={PSA_Y + 15} textAnchor="middle" fontSize={11} fontWeight="700"
+                        strokeWidth={psaActive ? 2 : 1} opacity={psaDone ? 0.5 : 1} />
+                      <text x={px} y={PSA_LABEL_Y + 13} textAnchor="middle" fontSize={11} fontWeight="700"
                         fill={psaDone ? "hsl(var(--muted-foreground))" : controlColor.text}>
                         {b.fullControl ? "Полный контроль" : "Контроль ПСА"}
                       </text>
-                      {b.psaDate && (
-                        <text x={cx} y={PSA_Y + 31} textAnchor="middle" fontSize={10}
-                          fill={controlColor.dot} opacity={psaDone ? 0.4 : 0.85}>
-                          {fmt(b.psaDate)}
-                        </text>
-                      )}
+                      <text x={px} y={PSA_LABEL_Y + 28} textAnchor="middle" fontSize={9}
+                        fill={controlColor.dot} opacity={psaDone ? 0.4 : 0.85}>
+                        {fmt(b.psaDate!)}
+                      </text>
                       {b.fullControl && (
-                        <text x={cx} y={PSA_Y + 46} textAnchor="middle" fontSize={9}
-                          fill={controlColor.text} opacity={psaDone ? 0.3 : 0.65}>
+                        <text x={px} y={PSA_LABEL_Y + 43} textAnchor="middle" fontSize={9}
+                          fill={controlColor.text} opacity={psaDone ? 0.3 : 0.6}>
                           ПСА · МРТ · КТ
                         </text>
                       )}
@@ -290,33 +285,28 @@ function ChemoTimeline({
                   </>
                 )}
 
-                {/* ── CYCLE DOT on axis ── */}
-                {/* glow ring when active */}
+                {/* ── CYCLE DOT (на оси, на дате введения) ── */}
                 <circle cx={cx} cy={AXIS_Y} r={DOT_R + 8}
-                  fill={C.cycle.dot} opacity={cycleActive ? 0.15 : 0}
-                  style={{ transition: "opacity 0.2s" }}
-                />
+                  fill={C.cycle.dot} opacity={cycleActive ? 0.12 : 0}
+                  style={{ transition: "opacity 0.2s" }} />
                 <g style={{ cursor: "pointer" }} onClick={() => tap(cycleId)}>
-                  {/* White/card base so dot fully covers the axis line */}
                   <circle cx={cx} cy={AXIS_Y} r={DOT_R + 1} fill="hsl(var(--card))" />
                   <circle cx={cx} cy={AXIS_Y} r={DOT_R}
                     fill={cycleDone ? "hsl(var(--muted))" : "#3b0764"}
                     stroke={cycleDone ? "hsl(var(--muted-foreground))" : C.cycle.dot}
-                    strokeWidth={2.5}
-                  />
+                    strokeWidth={2.5} />
                   {cycleDone
                     ? <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={16} fill={C.cycle.dot}>✓</text>
                     : <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={15} fontWeight="800" fill={C.cycle.text}>{b.num}</text>
                   }
                 </g>
-
-                {/* ── CYCLE LABEL below dot ── */}
-                <text x={cx} y={AXIS_Y + DOT_R + 16} textAnchor="middle" fontSize={10} fontWeight="600"
-                  fill="hsl(var(--foreground))" opacity={0.6}>
+                {/* подпись под кружком */}
+                <text x={cx} y={AXIS_Y + DOT_R + 15} textAnchor="middle" fontSize={10} fontWeight="600"
+                  fill="hsl(var(--foreground))" opacity={0.65}>
                   {isLast ? `Цикл ${b.num} (посл.)` : `Цикл ${b.num}`}
                 </text>
-                <text x={cx} y={AXIS_Y + DOT_R + 30} textAnchor="middle" fontSize={9}
-                  fill={C.cycle.dot} opacity={0.6} fontFamily="monospace">
+                <text x={cx} y={AXIS_Y + DOT_R + 28} textAnchor="middle" fontSize={9}
+                  fill={C.cycle.dot} opacity={0.55} fontFamily="monospace">
                   {fmt(b.infusionDate)}
                 </text>
 
@@ -324,7 +314,7 @@ function ChemoTimeline({
             );
           })}
 
-          {/* ══ COUNCIL DOT (последняя контрольная точка) ══ */}
+          {/* ══ COUNCIL DOT ══ */}
           {(() => {
             const cx = councilX;
             const councilId = "council";
@@ -332,61 +322,38 @@ function ChemoTimeline({
             const isActive = active === councilId;
             return (
               <g>
-                {/* axis extension to council */}
-                <line
-                  x1={cycleX(cycles) + DOT_R} y1={AXIS_Y}
-                  x2={cx - COUNCIL_R - 4} y2={AXIS_Y}
-                  stroke={COUNCIL_COLOR} strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.5}
-                />
-                {/* glow */}
+                <line x1={dateToX(endDate)} y1={AXIS_Y} x2={cx - COUNCIL_R - 4} y2={AXIS_Y}
+                  stroke={COUNCIL_COLOR} strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.45} />
                 <circle cx={cx} cy={AXIS_Y} r={COUNCIL_R + 8}
-                  fill={COUNCIL_COLOR} opacity={isActive ? 0.15 : 0}
-                  style={{ transition: "opacity 0.2s" }}
-                />
-                {/* outer pulse ring */}
+                  fill={COUNCIL_COLOR} opacity={isActive ? 0.12 : 0}
+                  style={{ transition: "opacity 0.2s" }} />
                 <circle cx={cx} cy={AXIS_Y} r={COUNCIL_R + 3}
-                  fill="none" stroke={COUNCIL_COLOR} strokeWidth={1.5} strokeOpacity={0.35}
-                />
+                  fill="none" stroke={COUNCIL_COLOR} strokeWidth={1.5} strokeOpacity={0.3} />
                 <g style={{ cursor: "pointer" }} onClick={() => tap(councilId)}>
+                  <circle cx={cx} cy={AXIS_Y} r={COUNCIL_R} fill="hsl(var(--card))" />
                   <circle cx={cx} cy={AXIS_Y} r={COUNCIL_R}
-                    fill={isDone ? "hsl(var(--muted))" : COUNCIL_COLOR + "22"}
-                    stroke={COUNCIL_COLOR} strokeWidth={2.5}
-                    opacity={isDone ? 0.5 : 1}
-                  />
-                  {isDone
-                    ? <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={14} fill={COUNCIL_COLOR}>✓</text>
-                    : <Icon name="Stethoscope" size={16} style={{ color: COUNCIL_COLOR }} />
-                  }
-                  {/* SVG doesn't support React components inline, draw icon as text symbol */}
-                  {!isDone && (
-                    <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle" fontSize={13} fill={COUNCIL_COLOR}>⊕</text>
-                  )}
+                    fill={isDone ? "hsl(var(--muted))" : COUNCIL_COLOR + "20"}
+                    stroke={COUNCIL_COLOR} strokeWidth={2.5} opacity={isDone ? 0.5 : 1} />
+                  <text x={cx} y={AXIS_Y + 1} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={isDone ? 14 : 13} fill={COUNCIL_COLOR}>
+                    {isDone ? "✓" : "★"}
+                  </text>
                 </g>
-                <text x={cx} y={AXIS_Y + COUNCIL_R + 16} textAnchor="middle" fontSize={11} fontWeight="700"
-                  fill={COUNCIL_COLOR}>
-                  Консилиум
-                </text>
-                <text x={cx} y={AXIS_Y + COUNCIL_R + 30} textAnchor="middle" fontSize={9}
-                  fill={COUNCIL_COLOR} opacity={0.7} fontFamily="monospace">
-                  {fmt(endDate)}
-                </text>
-
-                {/* Active popup — rendered as foreignObject */}
+                <text x={cx} y={AXIS_Y + COUNCIL_R + 15} textAnchor="middle" fontSize={11} fontWeight="700"
+                  fill={COUNCIL_COLOR}>Консилиум</text>
+                <text x={cx} y={AXIS_Y + COUNCIL_R + 29} textAnchor="middle" fontSize={9}
+                  fill={COUNCIL_COLOR} opacity={0.7} fontFamily="monospace">{fmt(endDate)}</text>
                 {isActive && (
-                  <foreignObject x={cx - 110} y={AXIS_Y - 170} width={220} height={160}>
+                  <foreignObject x={Math.min(cx - 110, svgW - 240)} y={AXIS_Y - 165} width={220} height={155}>
                     <div style={{
-                      background: "hsl(var(--card))",
-                      border: `2px solid ${COUNCIL_COLOR}60`,
-                      borderRadius: 16,
-                      padding: "14px 16px",
-                      boxShadow: `0 8px 32px ${COUNCIL_COLOR}25`,
+                      background: "hsl(var(--card))", border: `2px solid ${COUNCIL_COLOR}60`,
+                      borderRadius: 16, padding: "14px 16px", boxShadow: `0 8px 32px ${COUNCIL_COLOR}25`,
                     }}>
                       <p style={{ fontWeight: 700, fontSize: 13, color: COUNCIL_COLOR, marginBottom: 4 }}>Консилиум</p>
                       <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", marginBottom: 8, lineHeight: 1.5 }}>
-                        Оценка результатов лечения. Решение о дальнейшей тактике на основании ПСА и данных визуализации.
+                        Оценка результатов лечения. Решение о дальнейшей тактике по ПСА и визуализации.
                       </p>
-                      <button
-                        onClick={e => { e.stopPropagation(); toggle(councilId); }}
+                      <button onClick={e => { e.stopPropagation(); toggle(councilId); }}
                         style={{
                           width: "100%", padding: "6px 0", borderRadius: 8, fontSize: 11, fontWeight: 700,
                           background: isDone ? COUNCIL_COLOR + "30" : COUNCIL_COLOR + "15",
@@ -404,12 +371,11 @@ function ChemoTimeline({
         </svg>
       </div>
 
-      {/* ── ACTIVE POPUPS for cycle / blood / psa (HTML, positioned) ── */}
+      {/* ── ACTIVE POPUPS (fixed, по центру экрана) ── */}
       {blocks.map(b => {
-        const cx = cycleX(b.num);
         const cycleId = `cycle-${b.num}`;
         const bloodId = `blood-${b.num}`;
-        const psaId = `psa-${b.num}`;
+        const psaId   = `psa-${b.num}`;
         const controlColor = b.fullControl ? C.imaging : C.psa;
 
         return (
@@ -419,11 +385,12 @@ function ChemoTimeline({
               <div className="fixed z-50 rounded-2xl border p-4 shadow-2xl w-60"
                 style={{
                   backgroundColor: "hsl(var(--card))", borderColor: C.cycle.border,
-                  top: "50%", left: `calc(${cx}px + 48px)`, transform: "translateY(-50%)",
+                  top: "50%", left: "50%", transform: "translate(-50%, -50%)",
                 }}>
+                <button onClick={() => setActive(null)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"><Icon name="X" size={14} /></button>
                 <p className="font-bold text-foreground mb-1">Цикл {b.num}</p>
                 <p className="text-xs text-muted-foreground mb-1">{scheme.drug} {scheme.dose}</p>
-                <p className="text-xs text-muted-foreground mb-3">В/в капельно, 1 ч · Дата: {fmt(b.infusionDate)}<br />Премедикация: дексаметазон</p>
+                <p className="text-xs text-muted-foreground mb-3">В/в капельно, 1 ч · {fmt(b.infusionDate)}<br />Премедикация: дексаметазон</p>
                 <button onClick={() => toggle(cycleId)}
                   className="w-full py-1.5 rounded-xl text-xs font-semibold"
                   style={{ background: done.has(cycleId) ? C.cycle.dot + "30" : C.cycle.bg, color: C.cycle.dot, border: `1px solid ${C.cycle.border}` }}>
@@ -437,8 +404,9 @@ function ChemoTimeline({
               <div className="fixed z-50 rounded-2xl border p-4 shadow-2xl w-56"
                 style={{
                   backgroundColor: "hsl(var(--card))", borderColor: C.blood.border,
-                  top: "30%", left: `calc(${cx}px + 36px)`, transform: "translateY(-50%)",
+                  top: "50%", left: "50%", transform: "translate(-50%, -50%)",
                 }}>
+                <button onClick={() => setActive(null)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"><Icon name="X" size={14} /></button>
                 <p className="font-bold text-foreground mb-1">Анализы перед циклом {b.num}</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   ОАК с лейкоформулой<br />АЛТ, АСТ, билирубин, креатинин, глюкоза<br />
@@ -457,8 +425,9 @@ function ChemoTimeline({
               <div className="fixed z-50 rounded-2xl border p-4 shadow-2xl w-64"
                 style={{
                   backgroundColor: "hsl(var(--card))", borderColor: controlColor.border,
-                  top: "65%", left: `calc(${cx}px + 36px)`, transform: "translateY(-50%)",
+                  top: "50%", left: "50%", transform: "translate(-50%, -50%)",
                 }}>
+                <button onClick={() => setActive(null)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"><Icon name="X" size={14} /></button>
                 <p className="font-bold text-foreground mb-2">
                   {b.fullControl ? `Полный контроль после цикла ${b.num}` : `Контроль ПСА после цикла ${b.num}`}
                 </p>
