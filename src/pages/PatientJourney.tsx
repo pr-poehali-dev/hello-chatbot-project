@@ -374,14 +374,16 @@ export default function PatientJourney() {
   );
 
   // ── STEP: TIMELINE ─────────────────────────────────────────────────────
+  // Horizontal SVG: time flows left → right, proportional to real days
+  // Labels above axis = diagnostics/labs (left side events)
+  // Labels below axis = treatment (right side events / cycles)
 
-  // SVG proportional timeline constants
-  const SVG_PX_PER_DAY = 28;   // pixels per day along Y axis
-  const AXIS_X = 420;           // X position of the center axis
-  const SVG_PADDING_TOP = 40;
-  const SVG_PADDING_BOT = 60;
-  const LABEL_WIDTH = 360;      // max label panel width on each side
-  const WHISKER = 90;           // length of horizontal whisker line
+  const AXIS_Y = 180;            // Y of horizontal axis
+  const PX_PER_DAY = 9;         // pixels per day — will be scaled to fit viewport
+  const PAD_LEFT = 40;
+  const PAD_RIGHT = 60;
+  const WHISKER_UP = 130;       // whisker length upward (labs)
+  const WHISKER_DN = 110;       // whisker length downward (cycles)
 
   const endEvent = timeline.find(e => e.id === "end");
 
@@ -393,10 +395,12 @@ export default function PatientJourney() {
   const t0 = sorted[0].date.getTime();
   const tEnd = sorted[sorted.length - 1].date.getTime();
   const totalDays = Math.max((tEnd - t0) / 86400000, 1);
-  const svgHeight = SVG_PADDING_TOP + totalDays * SVG_PX_PER_DAY + SVG_PADDING_BOT;
-  const svgWidth = AXIS_X * 2 + 1; // symmetric
 
-  const dayY = (date: Date) => SVG_PADDING_TOP + ((date.getTime() - t0) / 86400000) * SVG_PX_PER_DAY;
+  // Scale so timeline fills ~90vw but min 800px
+  const svgW = Math.max(PAD_LEFT + totalDays * PX_PER_DAY + PAD_RIGHT, 900);
+  const svgH = AXIS_Y + WHISKER_DN + 80;
+
+  const dayX = (date: Date) => PAD_LEFT + ((date.getTime() - t0) / 86400000) * PX_PER_DAY;
 
   // Color map
   const COLOR: Record<string, string> = {
@@ -417,239 +421,230 @@ export default function PatientJourney() {
     return 5;
   };
 
+  // Alternate labels: odd events above axis, even below — prevents overlap
+  // left-side (labs/exams) → always ABOVE axis
+  // right-side (cycles)    → always BELOW axis
+  // center (start/end)     → straddling
+
   return (
-    <main className="w-full px-4 py-10 animate-fade-in">
+    <main className="w-full px-4 py-6 animate-fade-in overflow-hidden">
 
       {/* Header */}
-      <div className="max-w-4xl mx-auto flex items-start justify-between gap-4 mb-6 flex-wrap">
+      <div className="max-w-5xl mx-auto flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Путь пациента</p>
-          <h2 className="font-display text-3xl text-foreground">
+          <h2 className="font-display text-2xl text-foreground">
             {selectedScheme?.name} · {selectedCycles} циклов · {selectedScheme?.dose}
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             {formatDate(new Date(treatmentStart))}
             {endEvent && ` — ${formatDate(endEvent.date)}`}
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-center">
-            <p className="font-display text-3xl text-foreground">{progress}%</p>
-            <p className="text-xs text-muted-foreground">выполнено</p>
+        <div className="flex items-center gap-3">
+          {/* Progress ring */}
+          <div className="relative w-12 h-12 flex-shrink-0">
+            <svg width="48" height="48" className="-rotate-90">
+              <circle cx="24" cy="24" r="20" fill="none" stroke="hsl(var(--border))" strokeWidth="4" />
+              <circle cx="24" cy="24" r="20" fill="none" stroke="#6366f1" strokeWidth="4"
+                strokeDasharray={`${2 * Math.PI * 20}`}
+                strokeDashoffset={`${2 * Math.PI * 20 * (1 - progress / 100)}`}
+                strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.5s" }} />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-foreground">{progress}%</span>
           </div>
           <button onClick={resetAll}
-            className="px-4 py-2 border border-border rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            className="px-3 py-2 border border-border rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
             Новый план
           </button>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="max-w-4xl mx-auto w-full h-1 bg-border rounded-full mb-6 overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-500 bg-indigo-500" style={{ width: `${progress}%` }} />
-      </div>
-
       {/* Legend */}
-      <div className="max-w-4xl mx-auto flex flex-wrap gap-4 mb-8">
+      <div className="max-w-5xl mx-auto flex flex-wrap gap-4 mb-4">
         {[
           { color: "#a78bfa", label: "Цикл ХТ" },
           { color: "#60a5fa", label: "Анализ крови" },
           { color: "#fbbf24", label: "Контроль ПСА" },
-          { color: "#34d399", label: "Визуализация / МРТ" },
+          { color: "#34d399", label: "Визуализация" },
         ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-2">
-            <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill={color} opacity="0.9" /></svg>
+          <div key={label} className="flex items-center gap-1.5">
+            <svg width="10" height="10"><circle cx="5" cy="5" r="4.5" fill={color} /></svg>
             <span className="text-xs text-muted-foreground">{label}</span>
           </div>
         ))}
-        <div className="text-xs text-muted-foreground ml-2 italic">← обследования · лечение →</div>
+        <span className="text-xs text-muted-foreground italic ml-1">обследования — над осью · лечение — под осью</span>
       </div>
 
-      {/* ── SVG TIMELINE ── */}
-      <div className="overflow-x-auto">
+      {/* ── HORIZONTAL SVG TIMELINE ── */}
+      <div className="overflow-x-auto -mx-4 px-4" style={{ scrollbarWidth: "thin" }}>
         <svg
-          width={svgWidth}
-          height={svgHeight}
-          style={{ display: "block", margin: "0 auto", fontFamily: "inherit" }}
+          width={svgW}
+          height={svgH}
+          style={{ display: "block", fontFamily: "inherit", minWidth: svgW }}
         >
-          {/* ── AXIS LINE ── */}
+          {/* ── MAIN AXIS LINE ── */}
           <line
-            x1={AXIS_X} y1={SVG_PADDING_TOP - 10}
-            x2={AXIS_X} y2={svgHeight - SVG_PADDING_BOT + 10}
+            x1={PAD_LEFT - 10} y1={AXIS_Y}
+            x2={svgW - PAD_RIGHT + 10} y2={AXIS_Y}
             stroke="hsl(var(--border))"
             strokeWidth={3}
             strokeLinecap="round"
           />
 
-          {/* ── SEGMENT COLORS between events (color = next event's type) ── */}
+          {/* ── COLORED SEGMENTS between consecutive events ── */}
           {sorted.map((ev, i) => {
             if (i === 0) return null;
             const prev = sorted[i - 1];
-            const y1 = dayY(prev.date);
-            const y2 = dayY(ev.date);
-            const segColor = evColor(ev);
+            const x1 = dayX(prev.date) + dotR(prev);
+            const x2 = dayX(ev.date) - dotR(ev);
+            if (x2 <= x1) return null;
             return (
               <line key={`seg-${i}`}
-                x1={AXIS_X} y1={y1 + dotR(prev)}
-                x2={AXIS_X} y2={y2 - dotR(ev)}
-                stroke={segColor}
+                x1={x1} y1={AXIS_Y} x2={x2} y2={AXIS_Y}
+                stroke={evColor(ev)}
                 strokeWidth={3}
-                strokeOpacity={0.25}
+                strokeOpacity={0.3}
                 strokeLinecap="round"
               />
             );
           })}
 
+          {/* ── MONTH TICK MARKS on axis ── */}
+          {(() => {
+            const marks: { x: number; label: string }[] = [];
+            const d = new Date(sorted[0].date.getFullYear(), sorted[0].date.getMonth(), 1);
+            const last = sorted[sorted.length - 1].date;
+            while (d <= last) {
+              marks.push({
+                x: dayX(d),
+                label: d.toLocaleDateString("ru-RU", { month: "short" }),
+              });
+              d.setMonth(d.getMonth() + 1);
+            }
+            return marks.map(({ x, label }) => (
+              <g key={label + x}>
+                <line x1={x} y1={AXIS_Y - 8} x2={x} y2={AXIS_Y + 8}
+                  stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeOpacity={0.35} />
+                <text x={x} y={AXIS_Y + 20} textAnchor="middle" fontSize={9}
+                  fill="hsl(var(--muted-foreground))" opacity={0.45}>{label}</text>
+              </g>
+            ));
+          })()}
+
           {/* ── EVENTS ── */}
           {sorted.map((ev) => {
-            const y = dayY(ev.date);
+            const x = dayX(ev.date);
             const color = evColor(ev);
             const r = dotR(ev);
             const done = completedIds.has(ev.id);
             const isActive = activeId === ev.id;
-            const isLeft = ev.side === "left";
             const isCenter = ev.side === "center";
+            // left = labs/exams → above axis; right = cycles → below; center = both
+            const above = ev.side === "left" || isCenter;
+            const whiskerLen = above ? WHISKER_UP : WHISKER_DN;
+            const labelY = above ? AXIS_Y - whiskerLen : AXIS_Y + whiskerLen;
+            const lineY2 = above ? AXIS_Y - r : AXIS_Y + r;
 
-            // Whisker endpoint X
-            const whiskerEndX = isLeft
-              ? AXIS_X - WHISKER
-              : AXIS_X + WHISKER;
-
-            // Label anchor
-            const labelX = isLeft ? AXIS_X - WHISKER - 10 : AXIS_X + WHISKER + 10;
-            const textAnchor = isLeft ? "end" : "start";
-
-            const labelFontSize = ev.type === "cycle" || isCenter ? 13 : 11;
-            const labelFontWeight = ev.type === "cycle" || isCenter ? "600" : "400";
+            const fontSize = ev.type === "cycle" || isCenter ? 12 : 10;
+            const fontWeight = ev.type === "cycle" || isCenter ? "700" : "400";
 
             return (
-              <g
-                key={ev.id}
-                style={{ cursor: "pointer" }}
-                onClick={() => setActiveId(isActive ? null : ev.id)}
-              >
-                {/* Whisker line — dashed */}
-                {!isCenter && (
-                  <line
-                    x1={isLeft ? AXIS_X - r : AXIS_X + r}
-                    y1={y}
-                    x2={whiskerEndX}
-                    y2={y}
-                    stroke={color}
-                    strokeWidth={1.5}
-                    strokeDasharray="4 3"
-                    strokeOpacity={done ? 0.3 : 0.7}
+              <g key={ev.id} style={{ cursor: "pointer" }} onClick={() => setActiveId(isActive ? null : ev.id)}>
+
+                {/* Whisker: vertical dashed line from axis to label */}
+                <line
+                  x1={x} y1={lineY2}
+                  x2={x} y2={labelY}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  strokeDasharray="3 3"
+                  strokeOpacity={done ? 0.25 : 0.55}
+                />
+
+                {/* Dot glow */}
+                <circle cx={x} cy={AXIS_Y} r={r + 5} fill={color} opacity={isActive ? 0.18 : 0} />
+
+                {/* Dot */}
+                <circle
+                  cx={x} cy={AXIS_Y} r={r}
+                  fill={done ? "hsl(var(--muted-foreground))" : color}
+                  opacity={done ? 0.4 : 1}
+                />
+                {done && (
+                  <text x={x} y={AXIS_Y + 0.5} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={r} fill="white" fontWeight="900">✓</text>
+                )}
+
+                {/* Label box background for active */}
+                {isActive && (
+                  <rect
+                    x={x - 70} y={above ? labelY - 42 : labelY - 2}
+                    width={140} height={44}
+                    rx={8} ry={8}
+                    fill={color} opacity={0.1}
+                    stroke={color} strokeOpacity={0.4} strokeWidth={1}
                   />
                 )}
 
-                {/* Dot — outer glow ring */}
-                <circle
-                  cx={AXIS_X} cy={y} r={r + 4}
-                  fill={color}
-                  opacity={isActive ? 0.15 : 0}
-                />
-                {/* Dot */}
-                <circle
-                  cx={AXIS_X} cy={y} r={r}
-                  fill={done ? "hsl(var(--muted))" : color}
-                  stroke={done ? color : "none"}
-                  strokeWidth={done ? 2 : 0}
-                  opacity={done ? 0.5 : 1}
-                />
-                {/* Checkmark inside done dot */}
-                {done && (
-                  <text x={AXIS_X} y={y + 1} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={r * 1.1} fill={color} fontWeight="700">✓</text>
-                )}
-
-                {/* Label */}
+                {/* Label: main text */}
                 <text
-                  x={labelX} y={y - (ev.sublabel ? 7 : 1)}
-                  textAnchor={textAnchor}
+                  x={x}
+                  y={above ? labelY - 24 : labelY + 12}
+                  textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={labelFontSize}
-                  fontWeight={labelFontWeight}
+                  fontSize={fontSize}
+                  fontWeight={fontWeight}
                   fill={done ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))"}
-                  opacity={done ? 0.5 : 1}
-                  style={{ textDecoration: done ? "line-through" : "none" }}
+                  opacity={done ? 0.45 : 1}
                 >
                   {ev.label}
                 </text>
-                {ev.sublabel && (
-                  <text
-                    x={labelX} y={y + 8}
-                    textAnchor={textAnchor}
-                    dominantBaseline="middle"
-                    fontSize={9}
-                    fill="hsl(var(--muted-foreground))"
-                    opacity={done ? 0.4 : 0.7}
-                  >
-                    {ev.sublabel}
-                  </text>
-                )}
 
-                {/* Date badge */}
+                {/* Date */}
                 <text
-                  x={isCenter ? AXIS_X + r + 8 : (isLeft ? labelX - 4 : labelX + 4)}
-                  y={y + (ev.sublabel ? 19 : 13)}
-                  textAnchor={isLeft && !isCenter ? "end" : "start"}
+                  x={x}
+                  y={above ? labelY - 10 : labelY + 26}
+                  textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={9}
+                  fontSize={8}
                   fontFamily="monospace"
                   fill={color}
-                  opacity={done ? 0.4 : 0.85}
+                  opacity={done ? 0.3 : 0.8}
                 >
                   {formatDateShort(ev.date)}
                 </text>
 
-                {/* Active highlight panel (foreignObject) */}
+                {/* Active tooltip below/above the label */}
                 {isActive && (
                   <foreignObject
-                    x={isLeft ? AXIS_X - WHISKER - LABEL_WIDTH - 8 : AXIS_X + WHISKER + 8}
-                    y={y + 28}
-                    width={LABEL_WIDTH - 20}
-                    height={120}
+                    x={x - 100}
+                    y={above ? labelY - 88 : labelY + 44}
+                    width={200}
+                    height={80}
                   >
-                    <div
-                      style={{
-                        background: "hsl(var(--card))",
-                        border: `1px solid ${color}50`,
-                        borderRadius: 12,
-                        padding: "10px 14px",
-                        fontSize: 11,
-                        color: "hsl(var(--muted-foreground))",
-                        lineHeight: 1.5,
-                        boxShadow: `0 2px 12px ${color}20`,
-                      }}
-                    >
-                      {ev.type === "blood" && (
-                        <p>ОАК с лейкоформулой · АЛТ, АСТ, билирубин · Креатинин · Глюкоза</p>
-                      )}
-                      {ev.type === "psa" && (
-                        <p>Снижение ПСА ≥ 50% от базового — биохимический ответ на лечение</p>
-                      )}
-                      {ev.type === "imaging" && (
-                        <p>Оценка ответа по критериям RECIST 1.1</p>
-                      )}
-                      {ev.type === "cycle" && selectedScheme && (
-                        <p>{selectedScheme.drug} {selectedScheme.dose} · в/в, 1 ч · Премедикация: дексаметазон накануне, в день и на следующий день</p>
-                      )}
+                    <div style={{
+                      background: "hsl(var(--card))",
+                      border: `1px solid ${color}55`,
+                      borderRadius: 10,
+                      padding: "8px 12px",
+                      fontSize: 10,
+                      color: "hsl(var(--muted-foreground))",
+                      lineHeight: 1.5,
+                      boxShadow: `0 4px 16px ${color}22`,
+                    }}>
+                      {ev.type === "blood" && <p>ОАК · АЛТ, АСТ · Билирубин · Креатинин</p>}
+                      {ev.type === "psa" && <p>Снижение ≥ 50% — биохимический ответ</p>}
+                      {ev.type === "imaging" && <p>Оценка по RECIST 1.1</p>}
+                      {ev.type === "cycle" && selectedScheme && <p>{selectedScheme.drug} · в/в 1 ч · Премедикация: дексаметазон</p>}
                       <button
-                        onClick={(e) => { e.stopPropagation(); toggle(ev.id); }}
+                        onClick={e => { e.stopPropagation(); toggle(ev.id); }}
                         style={{
-                          marginTop: 8,
-                          padding: "3px 10px",
-                          borderRadius: 8,
-                          border: `1px solid ${color}60`,
-                          background: done ? color + "20" : "transparent",
-                          color: color,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          cursor: "pointer",
+                          marginTop: 5, padding: "2px 8px", borderRadius: 6,
+                          border: `1px solid ${color}70`, background: done ? color + "25" : "transparent",
+                          color, fontSize: 9, fontWeight: 700, cursor: "pointer",
                         }}
-                      >
-                        {done ? "✓ Выполнено" : "Отметить выполненным"}
-                      </button>
+                      >{done ? "✓ Готово" : "Отметить"}</button>
                     </div>
                   </foreignObject>
                 )}
@@ -657,34 +652,12 @@ export default function PatientJourney() {
             );
           })}
 
-          {/* ── MONTH LABELS on axis ── */}
-          {(() => {
-            const labels: { y: number; label: string }[] = [];
-            const start = sorted[0].date;
-            const end = sorted[sorted.length - 1].date;
-            const d = new Date(start.getFullYear(), start.getMonth(), 1);
-            while (d <= end) {
-              const y = dayY(d);
-              if (y >= SVG_PADDING_TOP) {
-                labels.push({
-                  y,
-                  label: d.toLocaleDateString("ru-RU", { month: "short", year: "numeric" }),
-                });
-              }
-              d.setMonth(d.getMonth() + 1);
-            }
-            return labels.map(({ y, label }) => (
-              <g key={label}>
-                <line x1={AXIS_X - 6} y1={y} x2={AXIS_X + 6} y2={y}
-                  stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeOpacity={0.4} />
-                <text x={AXIS_X} y={y - 6} textAnchor="middle" fontSize={8}
-                  fill="hsl(var(--muted-foreground))" opacity={0.4}>
-                  {label}
-                </text>
-              </g>
-            ));
-          })()}
-
+          {/* Arrow at end of axis */}
+          <polygon
+            points={`${svgW - PAD_RIGHT + 10},${AXIS_Y} ${svgW - PAD_RIGHT + 2},${AXIS_Y - 5} ${svgW - PAD_RIGHT + 2},${AXIS_Y + 5}`}
+            fill="hsl(var(--muted-foreground))"
+            opacity={0.4}
+          />
         </svg>
       </div>
 
