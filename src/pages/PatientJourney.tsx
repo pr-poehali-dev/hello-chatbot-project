@@ -378,12 +378,30 @@ export default function PatientJourney() {
   // Labels above axis = diagnostics/labs (left side events)
   // Labels below axis = treatment (right side events / cycles)
 
-  const AXIS_Y = 180;            // Y of horizontal axis
-  const PX_PER_DAY = 9;         // pixels per day — will be scaled to fit viewport
-  const PAD_LEFT = 40;
+  // ── LANE Y-POSITIONS (each event type gets its own horizontal lane) ──
+  // Above axis (labs/exams) — 3 lanes stacked upward
+  // Below axis (treatment)  — 2 lanes stacked downward
+  //
+  //  imaging  ── lane Y = AXIS_Y - 230
+  //  psa      ── lane Y = AXIS_Y - 155
+  //  blood    ── lane Y = AXIS_Y - 80
+  //  ─────────────── AXIS ───────────────
+  //  cycle    ── lane Y = AXIS_Y + 80
+  //  (start/end labels inline on axis)
+
+  const AXIS_Y = 260;
+  const PX_PER_DAY = 9;
+  const PAD_LEFT = 60;
   const PAD_RIGHT = 60;
-  const WHISKER_UP = 130;       // whisker length upward (labs)
-  const WHISKER_DN = 110;       // whisker length downward (cycles)
+
+  const LANE: Record<string, number> = {
+    imaging: AXIS_Y - 230,
+    psa:     AXIS_Y - 155,
+    blood:   AXIS_Y - 80,
+    start:   AXIS_Y,
+    end:     AXIS_Y,
+    cycle:   AXIS_Y + 80,
+  };
 
   const endEvent = timeline.find(e => e.id === "end");
 
@@ -396,9 +414,8 @@ export default function PatientJourney() {
   const tEnd = sorted[sorted.length - 1].date.getTime();
   const totalDays = Math.max((tEnd - t0) / 86400000, 1);
 
-  // Scale so timeline fills ~90vw but min 800px
   const svgW = Math.max(PAD_LEFT + totalDays * PX_PER_DAY + PAD_RIGHT, 900);
-  const svgH = AXIS_Y + WHISKER_DN + 80;
+  const svgH = AXIS_Y + 80 + 80; // axis + cycle lane + padding
 
   const dayX = (date: Date) => PAD_LEFT + ((date.getTime() - t0) / 86400000) * PX_PER_DAY;
 
@@ -460,39 +477,72 @@ export default function PatientJourney() {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="max-w-5xl mx-auto flex flex-wrap gap-4 mb-4">
-        {[
-          { color: "#a78bfa", label: "Цикл ХТ" },
-          { color: "#60a5fa", label: "Анализ крови" },
-          { color: "#fbbf24", label: "Контроль ПСА" },
-          { color: "#34d399", label: "Визуализация" },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <svg width="10" height="10"><circle cx="5" cy="5" r="4.5" fill={color} /></svg>
-            <span className="text-xs text-muted-foreground">{label}</span>
-          </div>
-        ))}
-        <span className="text-xs text-muted-foreground italic ml-1">обследования — над осью · лечение — под осью</span>
+      {/* Lane labels — left side legend */}
+      <div className="max-w-5xl mx-auto mb-3">
+        <div className="flex flex-wrap gap-4">
+          {[
+            { color: "#34d399", label: "Визуализация / МРТ" },
+            { color: "#fbbf24", label: "Контроль ПСА" },
+            { color: "#60a5fa", label: "Анализ крови" },
+            { color: "#6b7280", label: "Ось времени" },
+            { color: "#a78bfa", label: "Цикл ХТ" },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-1.5">
+              <svg width="10" height="10"><circle cx="5" cy="5" r="4.5" fill={color} /></svg>
+              <span className="text-xs text-muted-foreground">{label}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── HORIZONTAL SVG TIMELINE ── */}
-      <div className="overflow-x-auto -mx-4 px-4" style={{ scrollbarWidth: "thin" }}>
-        <svg
-          width={svgW}
-          height={svgH}
-          style={{ display: "block", fontFamily: "inherit", minWidth: svgW }}
-        >
+      <div className="overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+        <svg width={svgW} height={svgH} style={{ display: "block", fontFamily: "inherit", minWidth: svgW }}>
+
+          {/* ── LANE GUIDE LINES (subtle horizontal rules per lane) ── */}
+          {(["imaging", "psa", "blood", "cycle"] as const).map(type => {
+            const y = LANE[type];
+            const laneColor = evColor({ type } as TimelineEvent);
+            return (
+              <line key={type}
+                x1={PAD_LEFT - 20} y1={y} x2={svgW - PAD_RIGHT + 20} y2={y}
+                stroke={laneColor} strokeWidth={1} strokeOpacity={0.1} strokeDasharray="4 6"
+              />
+            );
+          })}
+
+          {/* ── LANE LABELS on left ── */}
+          {([
+            { type: "imaging", label: "МРТ/КТ" },
+            { type: "psa",     label: "ПСА" },
+            { type: "blood",   label: "ОАК" },
+            { type: "cycle",   label: "Цикл" },
+          ] as const).map(({ type, label }) => {
+            const y = LANE[type];
+            const color = evColor({ type } as TimelineEvent);
+            return (
+              <text key={type} x={PAD_LEFT - 8} y={y} textAnchor="end" dominantBaseline="middle"
+                fontSize={9} fill={color} opacity={0.6} fontWeight="600" letterSpacing="0.05em">
+                {label}
+              </text>
+            );
+          })}
+
           {/* ── MAIN AXIS LINE ── */}
           <line
-            x1={PAD_LEFT - 10} y1={AXIS_Y}
-            x2={svgW - PAD_RIGHT + 10} y2={AXIS_Y}
+            x1={PAD_LEFT - 20} y1={AXIS_Y}
+            x2={svgW - PAD_RIGHT + 20} y2={AXIS_Y}
             stroke="hsl(var(--border))"
             strokeWidth={3}
             strokeLinecap="round"
           />
+          {/* Arrow */}
+          <polygon
+            points={`${svgW - PAD_RIGHT + 22},${AXIS_Y} ${svgW - PAD_RIGHT + 13},${AXIS_Y - 5} ${svgW - PAD_RIGHT + 13},${AXIS_Y + 5}`}
+            fill="hsl(var(--muted-foreground))" opacity={0.35}
+          />
 
-          {/* ── COLORED SEGMENTS between consecutive events ── */}
+          {/* ── COLORED SEGMENTS on axis between events (sorted by date) ── */}
           {sorted.map((ev, i) => {
             if (i === 0) return null;
             const prev = sorted[i - 1];
@@ -502,32 +552,26 @@ export default function PatientJourney() {
             return (
               <line key={`seg-${i}`}
                 x1={x1} y1={AXIS_Y} x2={x2} y2={AXIS_Y}
-                stroke={evColor(ev)}
-                strokeWidth={3}
-                strokeOpacity={0.3}
-                strokeLinecap="round"
+                stroke={evColor(ev)} strokeWidth={3} strokeOpacity={0.28} strokeLinecap="round"
               />
             );
           })}
 
-          {/* ── MONTH TICK MARKS on axis ── */}
+          {/* ── MONTH TICKS ── */}
           {(() => {
             const marks: { x: number; label: string }[] = [];
             const d = new Date(sorted[0].date.getFullYear(), sorted[0].date.getMonth(), 1);
             const last = sorted[sorted.length - 1].date;
             while (d <= last) {
-              marks.push({
-                x: dayX(d),
-                label: d.toLocaleDateString("ru-RU", { month: "short" }),
-              });
+              marks.push({ x: dayX(d), label: d.toLocaleDateString("ru-RU", { month: "short" }) });
               d.setMonth(d.getMonth() + 1);
             }
             return marks.map(({ x, label }) => (
               <g key={label + x}>
-                <line x1={x} y1={AXIS_Y - 8} x2={x} y2={AXIS_Y + 8}
-                  stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeOpacity={0.35} />
-                <text x={x} y={AXIS_Y + 20} textAnchor="middle" fontSize={9}
-                  fill="hsl(var(--muted-foreground))" opacity={0.45}>{label}</text>
+                <line x1={x} y1={AXIS_Y - 7} x2={x} y2={AXIS_Y + 7}
+                  stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeOpacity={0.3} />
+                <text x={x} y={AXIS_Y - 14} textAnchor="middle" fontSize={8}
+                  fill="hsl(var(--muted-foreground))" opacity={0.4}>{label}</text>
               </g>
             ));
           })()}
@@ -540,88 +584,72 @@ export default function PatientJourney() {
             const done = completedIds.has(ev.id);
             const isActive = activeId === ev.id;
             const isCenter = ev.side === "center";
-            // left = labs/exams → above axis; right = cycles → below; center = both
-            const above = ev.side === "left" || isCenter;
-            const whiskerLen = above ? WHISKER_UP : WHISKER_DN;
-            const labelY = above ? AXIS_Y - whiskerLen : AXIS_Y + whiskerLen;
-            const lineY2 = above ? AXIS_Y - r : AXIS_Y + r;
 
-            const fontSize = ev.type === "cycle" || isCenter ? 12 : 10;
-            const fontWeight = ev.type === "cycle" || isCenter ? "700" : "400";
+            // Lane Y for this event type
+            const laneY = LANE[ev.type] ?? AXIS_Y;
+            const above = laneY <= AXIS_Y;
 
             return (
               <g key={ev.id} style={{ cursor: "pointer" }} onClick={() => setActiveId(isActive ? null : ev.id)}>
 
-                {/* Whisker: vertical dashed line from axis to label */}
-                <line
-                  x1={x} y1={lineY2}
-                  x2={x} y2={labelY}
-                  stroke={color}
-                  strokeWidth={1.5}
-                  strokeDasharray="3 3"
-                  strokeOpacity={done ? 0.25 : 0.55}
-                />
-
-                {/* Dot glow */}
-                <circle cx={x} cy={AXIS_Y} r={r + 5} fill={color} opacity={isActive ? 0.18 : 0} />
-
-                {/* Dot */}
-                <circle
-                  cx={x} cy={AXIS_Y} r={r}
-                  fill={done ? "hsl(var(--muted-foreground))" : color}
-                  opacity={done ? 0.4 : 1}
-                />
-                {done && (
-                  <text x={x} y={AXIS_Y + 0.5} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={r} fill="white" fontWeight="900">✓</text>
-                )}
-
-                {/* Label box background for active */}
-                {isActive && (
-                  <rect
-                    x={x - 70} y={above ? labelY - 42 : labelY - 2}
-                    width={140} height={44}
-                    rx={8} ry={8}
-                    fill={color} opacity={0.1}
-                    stroke={color} strokeOpacity={0.4} strokeWidth={1}
+                {/* Vertical connector: axis dot → lane dot */}
+                {!isCenter && (
+                  <line
+                    x1={x} y1={above ? AXIS_Y - r : AXIS_Y + r}
+                    x2={x} y2={laneY}
+                    stroke={color} strokeWidth={1.5} strokeDasharray="3 3"
+                    strokeOpacity={done ? 0.2 : 0.45}
                   />
                 )}
 
-                {/* Label: main text */}
+                {/* Axis dot (small tick for non-center) */}
+                {!isCenter && (
+                  <circle cx={x} cy={AXIS_Y} r={3}
+                    fill={color} opacity={done ? 0.3 : 0.7}
+                  />
+                )}
+
+                {/* Lane dot — glow ring */}
+                <circle cx={x} cy={laneY} r={r + 5} fill={color} opacity={isActive ? 0.15 : 0} />
+
+                {/* Lane dot */}
+                <circle cx={x} cy={laneY} r={r}
+                  fill={done ? "hsl(var(--muted-foreground))" : color}
+                  stroke={isActive ? color : "none"} strokeWidth={2}
+                  opacity={done ? 0.4 : 1}
+                />
+                {done && (
+                  <text x={x} y={laneY + 0.5} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={r - 1} fill="white" fontWeight="900">✓</text>
+                )}
+
+                {/* Label above/below lane dot */}
                 <text
                   x={x}
-                  y={above ? labelY - 24 : labelY + 12}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={fontSize}
-                  fontWeight={fontWeight}
+                  y={above ? laneY - 10 : laneY + 12}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={isCenter ? 11 : 9}
+                  fontWeight={isCenter ? "700" : "500"}
                   fill={done ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))"}
-                  opacity={done ? 0.45 : 1}
+                  opacity={done ? 0.4 : 1}
                 >
-                  {ev.label}
+                  {isCenter ? ev.label : formatDateShort(ev.date)}
                 </text>
 
-                {/* Date */}
-                <text
-                  x={x}
-                  y={above ? labelY - 10 : labelY + 26}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={8}
-                  fontFamily="monospace"
-                  fill={color}
-                  opacity={done ? 0.3 : 0.8}
-                >
-                  {formatDateShort(ev.date)}
-                </text>
+                {/* For center events: also show date below */}
+                {isCenter && (
+                  <text x={x} y={laneY + 14} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={8} fontFamily="monospace" fill={color} opacity={0.75}>
+                    {formatDateShort(ev.date)}
+                  </text>
+                )}
 
-                {/* Active tooltip below/above the label */}
+                {/* Active popup */}
                 {isActive && (
                   <foreignObject
-                    x={x - 100}
-                    y={above ? labelY - 88 : labelY + 44}
-                    width={200}
-                    height={80}
+                    x={Math.min(x - 90, svgW - 200)}
+                    y={above ? laneY - 100 : laneY + 20}
+                    width={180} height={90}
                   >
                     <div style={{
                       background: "hsl(var(--card))",
@@ -631,17 +659,20 @@ export default function PatientJourney() {
                       fontSize: 10,
                       color: "hsl(var(--muted-foreground))",
                       lineHeight: 1.5,
-                      boxShadow: `0 4px 16px ${color}22`,
+                      boxShadow: `0 4px 20px ${color}25`,
                     }}>
+                      <p style={{ fontWeight: 600, color: "hsl(var(--foreground))", marginBottom: 3 }}>{ev.label}</p>
+                      {ev.sublabel && <p style={{ marginBottom: 4 }}>{ev.sublabel}</p>}
                       {ev.type === "blood" && <p>ОАК · АЛТ, АСТ · Билирубин · Креатинин</p>}
                       {ev.type === "psa" && <p>Снижение ≥ 50% — биохимический ответ</p>}
                       {ev.type === "imaging" && <p>Оценка по RECIST 1.1</p>}
-                      {ev.type === "cycle" && selectedScheme && <p>{selectedScheme.drug} · в/в 1 ч · Премедикация: дексаметазон</p>}
+                      {ev.type === "cycle" && selectedScheme && <p>{selectedScheme.drug} · в/в 1 ч · Дексаметазон</p>}
                       <button
-                        onClick={e => { e.stopPropagation(); toggle(ev.id); }}
+                        onClick={e2 => { e2.stopPropagation(); toggle(ev.id); }}
                         style={{
                           marginTop: 5, padding: "2px 8px", borderRadius: 6,
-                          border: `1px solid ${color}70`, background: done ? color + "25" : "transparent",
+                          border: `1px solid ${color}70`,
+                          background: done ? color + "25" : "transparent",
                           color, fontSize: 9, fontWeight: 700, cursor: "pointer",
                         }}
                       >{done ? "✓ Готово" : "Отметить"}</button>
@@ -652,12 +683,6 @@ export default function PatientJourney() {
             );
           })}
 
-          {/* Arrow at end of axis */}
-          <polygon
-            points={`${svgW - PAD_RIGHT + 10},${AXIS_Y} ${svgW - PAD_RIGHT + 2},${AXIS_Y - 5} ${svgW - PAD_RIGHT + 2},${AXIS_Y + 5}`}
-            fill="hsl(var(--muted-foreground))"
-            opacity={0.4}
-          />
         </svg>
       </div>
 

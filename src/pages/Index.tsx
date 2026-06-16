@@ -727,67 +727,92 @@ export default function Index() {
             </p>
           </section>
 
-          {/* ── HORIZONTAL CARDS 3:4 ── */}
-          <section className="pb-20">
+          {/* ── STACKED DECK CARDS ── */}
+          <section className="pb-24">
             {(() => {
               const cards: { key: Section; icon: string; label: string; desc: string; accent: string }[] = [
-                { key: "journey",   icon: "Route",        label: "Путь пациента",                  desc: "Персональный план лечения от консилиума до завершения курса.",      accent: "#6366f1" },
-                { key: "tracker",   icon: "Activity",     label: "Трекер шкал",                    desc: "ECOG, боль по ВАШ, тревожность по GAD-7 — быстро и структурировано.", accent: "#a78bfa" },
-                { key: "diary",     icon: "NotebookPen",  label: "Дневник",                        desc: "Ежедневные записи о состоянии и динамика между визитами.",           accent: "#60a5fa" },
-                { key: "calendar",  icon: "CalendarDays", label: "Календарь",                      desc: "Приёмы, процедуры, анализы — все события в одном месте.",           accent: "#34d399" },
-                { key: "reference", icon: "BookOpen",     label: "Справочник",                     desc: "Нозологии онкоурологии: симптомы, диагностика, стадии.",            accent: "#f59e0b" },
-                { key: "anxiety",   icon: "HeartPulse",   label: "Психоэмоциональное состояние",   desc: "Скрининг тревоги, депрессии и эмоционального фона.",                accent: "#f472b6" },
+                { key: "journey",   icon: "Route",        label: "Путь пациента",               desc: "Персональный план лечения от консилиума до завершения курса.",       accent: "#6366f1" },
+                { key: "tracker",   icon: "Activity",     label: "Трекер шкал",                 desc: "ECOG, боль по ВАШ, тревожность по GAD-7 — быстро и структурировано.", accent: "#a78bfa" },
+                { key: "diary",     icon: "NotebookPen",  label: "Дневник",                     desc: "Ежедневные записи о состоянии и динамика между визитами.",            accent: "#60a5fa" },
+                { key: "calendar",  icon: "CalendarDays", label: "Календарь",                   desc: "Приёмы, процедуры, анализы — все события в одном месте.",            accent: "#34d399" },
+                { key: "reference", icon: "BookOpen",     label: "Справочник нозологий",        desc: "Нозологии онкоурологии: симптомы, диагностика, стадии.",             accent: "#f59e0b" },
+                { key: "anxiety",   icon: "HeartPulse",   label: "Психоэмоциональное состояние",desc: "Скрининг тревоги, депрессии и эмоционального фона.",                 accent: "#f472b6" },
               ];
 
+              // Each card peeks out by PEEK px below the previous one
+              const PEEK = 52;
+              const CARD_H = 96; // collapsed height when under others
+
               return (
-                <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 snap-x snap-mandatory"
-                  style={{ scrollbarWidth: "none" }}>
-                  {cards.map((card) => (
+                <div
+                  className="relative w-full"
+                  style={{ height: CARD_H + (cards.length - 1) * PEEK + 8 }}
+                >
+                  {cards.map((card, i) => (
                     <button
                       key={card.key}
                       onClick={() => setSection(card.key)}
-                      className="group relative flex-shrink-0 snap-start rounded-3xl border border-border bg-card text-left transition-all duration-300 ease-out hover:border-transparent"
+                      className="absolute left-0 right-0 group text-left rounded-3xl border border-border bg-card transition-all duration-300 ease-out"
                       style={{
-                        width: "clamp(160px, 22vw, 210px)",
-                        aspectRatio: "3 / 4",
-                        padding: "24px 20px",
+                        top: i * PEEK,
+                        zIndex: i + 1,
+                        height: CARD_H,
+                        padding: "0 28px",
+                        overflow: "hidden",
                       }}
                       onMouseEnter={e => {
                         const el = e.currentTarget;
-                        el.style.transform = "translateY(-6px) scale(1.03)";
-                        el.style.boxShadow = `0 24px 48px ${card.accent}30, 0 4px 20px rgba(0,0,0,0.08)`;
-                        el.style.borderColor = card.accent + "50";
-                        el.style.backgroundColor = card.accent + "08";
+                        el.style.height = "auto";
+                        el.style.minHeight = `${CARD_H + 48}px`;
+                        el.style.zIndex = "100";
+                        el.style.transform = "translateY(-4px)";
+                        el.style.boxShadow = `0 20px 48px ${card.accent}28, 0 4px 20px rgba(0,0,0,0.1)`;
+                        el.style.borderColor = card.accent + "55";
+                        el.style.backgroundColor = card.accent + "06";
                       }}
                       onMouseLeave={e => {
                         const el = e.currentTarget;
+                        el.style.height = `${CARD_H}px`;
+                        el.style.minHeight = "";
+                        el.style.zIndex = String(i + 1);
                         el.style.transform = "";
                         el.style.boxShadow = "";
                         el.style.borderColor = "";
                         el.style.backgroundColor = "";
                       }}
                     >
-                      {/* Background glow */}
-                      <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                        style={{ background: `radial-gradient(ellipse at 50% 0%, ${card.accent}12 0%, transparent 70%)` }} />
+                      {/* Accent left stripe */}
+                      <div className="absolute left-0 top-4 bottom-4 w-1 rounded-full transition-opacity duration-300 opacity-0 group-hover:opacity-100"
+                        style={{ backgroundColor: card.accent }} />
 
-                      {/* Icon */}
-                      <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center mb-auto transition-transform duration-300 group-hover:scale-110"
-                        style={{ backgroundColor: card.accent + "20" }}
-                      >
-                        <Icon name={card.icon as "Route"} size={24} style={{ color: card.accent }} />
-                      </div>
+                      <div className="flex items-center gap-4 h-full" style={{ minHeight: CARD_H }}>
+                        {/* Icon */}
+                        <div
+                          className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
+                          style={{ backgroundColor: card.accent + "18" }}
+                        >
+                          <Icon name={card.icon as "Route"} size={22} style={{ color: card.accent }} />
+                        </div>
 
-                      {/* Content — pushed to bottom */}
-                      <div className="flex flex-col justify-end h-full pt-14">
-                        <p className="font-semibold text-foreground text-base leading-snug mb-2">{card.label}</p>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{card.desc}</p>
+                        {/* Text */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-foreground text-base leading-tight">{card.label}</p>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity duration-200 max-w-lg">
+                            {card.desc}
+                          </p>
+                        </div>
 
-                        {/* Arrow chip */}
-                        <div className="flex items-center gap-1 mt-4 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0">
-                          <span className="text-xs font-medium" style={{ color: card.accent }}>Открыть</span>
-                          <Icon name="ArrowRight" size={12} style={{ color: card.accent }} />
+                        {/* Number badge */}
+                        <span className="text-xs font-mono text-muted-foreground opacity-30 flex-shrink-0 group-hover:opacity-0 transition-opacity">
+                          0{i + 1}
+                        </span>
+
+                        {/* Arrow on hover */}
+                        <div
+                          className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-200 -mr-1"
+                          style={{ backgroundColor: card.accent + "18" }}
+                        >
+                          <Icon name="ArrowRight" size={15} style={{ color: card.accent }} />
                         </div>
                       </div>
                     </button>
