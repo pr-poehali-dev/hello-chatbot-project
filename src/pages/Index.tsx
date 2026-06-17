@@ -732,8 +732,8 @@ export default function Index() {
           <section className="pb-24">
             {(() => {
               const cards: { key: Section; icon: string; label: string; desc: string; accent: string }[] = [
-                { key: "journey",      icon: "Route",        label: "Путь пациента",  desc: "Персональный план лечения от консилиума до завершения курса.", accent: "#6366f1" },
-                { key: "tracker",      icon: "Activity",     label: "Трекер шкал",   desc: "ECOG, боль по ВАШ, тревожность по GAD-7.",                       accent: "#a78bfa" },
+                { key: "journey",      icon: "Route",        label: "Моё лечение",        desc: "Персональный план лечения от консилиума до завершения курса.", accent: "#6366f1" },
+                { key: "tracker",      icon: "Activity",     label: "Трекер симптомов",   desc: "ECOG, боль по ВАШ, тревожность по GAD-7.",                       accent: "#a78bfa" },
                 { key: "diary",        icon: "NotebookPen",  label: "Дневник",        desc: "Ежедневные записи о состоянии и динамика между визитами.",        accent: "#60a5fa" },
                 { key: "calendar",     icon: "CalendarDays", label: "Календарь",      desc: "Приёмы, процедуры, анализы — все события в одном месте.",        accent: "#34d399" },
                 { key: "reference",    icon: "BookOpen",     label: "Справочник",     desc: "Нозологии онкоурологии: симптомы, диагностика, стадии.",         accent: "#f59e0b" },

@@ -484,7 +484,7 @@ export default function PatientJourney() {
   if (step === "setup") return (
     <main className="max-w-xl mx-auto px-5 py-10 animate-fade-in">
       <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Путь пациента</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Моё лечение</p>
         <h2 className="font-display text-3xl text-foreground mb-1">Решение консилиума</h2>
         <p className="text-sm text-muted-foreground">Дата и тактика лечения</p>
       </div>
