@@ -98,54 +98,37 @@ const C = {
 // DATE PICKER COMPONENT
 // ─────────────────────────────────────────────────────────────
 
-function DatePicker({ value, onChange, max, placeholder }: {
+function DatePicker({ value, onChange, max }: {
   value: string;
   onChange: (v: string) => void;
   max?: string;
-  placeholder: string;
+  placeholder?: string;
 }) {
-  const accent = value ? "#6366f1" : undefined;
-  const formatted = value
-    ? new Date(value).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })
-    : null;
-
+  const hasValue = Boolean(value);
   return (
-    <div className="relative" style={{ borderRadius: 16, overflow: "hidden" }}>
-      {/* Visual layer */}
-      <div className="flex items-center gap-4 px-5 py-5 pointer-events-none"
-        style={{
-          borderRadius: 16,
-          border: `2px solid ${accent ? "#6366f170" : "hsl(var(--border))"}`,
-          backgroundColor: accent ? "#6366f10d" : "hsl(var(--secondary))",
-          boxShadow: accent ? "0 2px 20px #6366f115" : "none",
-        }}>
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: accent ? "#6366f122" : "hsl(var(--border))" }}>
-          <Icon name="CalendarDays" size={26} style={{ color: accent ? "#818cf8" : "hsl(var(--muted-foreground))" }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          {formatted
-            ? <p className="font-bold text-foreground text-xl leading-tight">{formatted}</p>
-            : <p className="font-semibold text-lg" style={{ color: "hsl(var(--muted-foreground))" }}>{placeholder}</p>
-          }
-          <p className="text-xs mt-1" style={{ color: "hsl(var(--muted-foreground))" }}>
-            {formatted ? "Нажмите чтобы изменить" : "Нажмите чтобы выбрать дату"}
-          </p>
-        </div>
-        <Icon name="ChevronDown" size={20} style={{ color: accent ? "#818cf8" : "hsl(var(--muted-foreground))", flexShrink: 0 }} />
-      </div>
-      {/* Real input stretches over the entire block — fully clickable */}
-      <input
-        type="date"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        max={max}
-        style={{
-          position: "absolute", inset: 0, width: "100%", height: "100%",
-          opacity: 0.01, cursor: "pointer", fontSize: 16,
-        }}
-      />
-    </div>
+    <input
+      type="date"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      max={max}
+      style={{
+        display: "block",
+        width: "100%",
+        padding: "20px 20px",
+        borderRadius: 16,
+        border: `2px solid ${hasValue ? "#6366f170" : "hsl(var(--border))"}`,
+        backgroundColor: hasValue ? "#6366f10d" : "hsl(var(--secondary))",
+        boxShadow: hasValue ? "0 2px 20px #6366f115" : "none",
+        color: hasValue ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
+        fontSize: 17,
+        fontWeight: hasValue ? 700 : 500,
+        cursor: "pointer",
+        outline: "none",
+        appearance: "none",
+        WebkitAppearance: "none",
+        fontFamily: "inherit",
+      }}
+    />
   );
 }
 
