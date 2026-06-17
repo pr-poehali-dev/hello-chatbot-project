@@ -622,7 +622,7 @@ export default function Index() {
 
   const navItems: { key: Section; label: string; wip?: boolean }[] = [
     { key: "home", label: "Главная" },
-    { key: "journey", label: "Путь пациента" },
+    { key: "journey", label: "Моё лечение" },
     { key: "tracker", label: "Трекер" },
     { key: "diary", label: "Дневник" },
     { key: "calendar", label: "Календарь" },
