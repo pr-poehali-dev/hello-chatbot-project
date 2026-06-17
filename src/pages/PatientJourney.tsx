@@ -486,31 +486,32 @@ export default function PatientJourney() {
         <p className="text-sm text-muted-foreground">Дата и тактика лечения</p>
       </div>
       <div className="space-y-4">
-        {/* Дата консилиума — красивый пикер */}
+        {/* Дата консилиума */}
         <div className="bg-card border border-border rounded-2xl p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Дата консилиума</p>
-          <label className="flex items-center gap-4 cursor-pointer group">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors"
-              style={{ backgroundColor: councilDate ? "#6366f118" : "hsl(var(--secondary))", border: `2px solid ${councilDate ? "#6366f160" : "hsl(var(--border))"}` }}>
-              <Icon name="CalendarDays" size={20} style={{ color: councilDate ? "#818cf8" : "hsl(var(--muted-foreground))" }} />
-            </div>
-            <div className="flex-1">
-              {councilDate
-                ? <p className="font-semibold text-foreground text-lg">{new Date(councilDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</p>
-                : <p className="text-muted-foreground">Выберите дату</p>
-              }
-              <p className="text-xs text-muted-foreground mt-0.5">Нажмите чтобы выбрать</p>
+          <label className="relative block cursor-pointer">
+            <div className="flex items-center gap-5 px-5 py-5 rounded-2xl border-2 transition-all active:scale-[0.98]"
+              style={{
+                borderColor: councilDate ? "#6366f170" : "hsl(var(--border))",
+                backgroundColor: councilDate ? "#6366f10d" : "hsl(var(--secondary))",
+                boxShadow: councilDate ? "0 2px 16px #6366f118" : "none",
+              }}>
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: councilDate ? "#6366f122" : "hsl(var(--border))" }}>
+                <Icon name="CalendarDays" size={26} style={{ color: councilDate ? "#818cf8" : "hsl(var(--muted-foreground))" }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                {councilDate
+                  ? <p className="font-bold text-foreground text-xl leading-tight">{new Date(councilDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</p>
+                  : <p className="font-semibold text-muted-foreground text-lg">Выберите дату</p>
+                }
+                <p className="text-xs text-muted-foreground mt-1">Нажмите на блок чтобы открыть календарь</p>
+              </div>
+              <Icon name="ChevronRight" size={18} className="text-muted-foreground flex-shrink-0 opacity-50" />
             </div>
             <input type="date" value={councilDate} onChange={e => setCouncilDate(e.target.value)} max={today}
-              className="absolute opacity-0 w-0 h-0 pointer-events-none" tabIndex={-1} />
-            <div className="px-3 py-1.5 rounded-xl border border-border text-xs text-muted-foreground group-hover:text-foreground group-hover:border-foreground/30 transition-all">
-              Изменить
-            </div>
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
           </label>
-          {/* Скрытый нативный инпут, открываем кликом по кнопке */}
-          <input id="council-date-input" type="date" value={councilDate}
-            onChange={e => setCouncilDate(e.target.value)} max={today}
-            className="mt-3 w-full px-4 py-2.5 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer" />
         </div>
 
         {/* Решение консилиума */}
@@ -622,21 +623,29 @@ export default function PatientJourney() {
           {cycles && (
             <div className="bg-card border border-border rounded-2xl p-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Дата начала (цикл 1)</p>
-              <label className="flex items-center gap-4 cursor-pointer mb-3">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: startDate ? "#6366f118" : "hsl(var(--secondary))", border: `2px solid ${startDate ? "#6366f160" : "hsl(var(--border))"}` }}>
-                  <Icon name="CalendarDays" size={20} style={{ color: startDate ? "#818cf8" : "hsl(var(--muted-foreground))" }} />
+              <label className="relative block cursor-pointer">
+                <div className="flex items-center gap-5 px-5 py-5 rounded-2xl border-2 transition-all active:scale-[0.98]"
+                  style={{
+                    borderColor: startDate ? "#6366f170" : "hsl(var(--border))",
+                    backgroundColor: startDate ? "#6366f10d" : "hsl(var(--secondary))",
+                    boxShadow: startDate ? "0 2px 16px #6366f118" : "none",
+                  }}>
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: startDate ? "#6366f122" : "hsl(var(--border))" }}>
+                    <Icon name="CalendarDays" size={26} style={{ color: startDate ? "#818cf8" : "hsl(var(--muted-foreground))" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {startDate
+                      ? <p className="font-bold text-foreground text-xl leading-tight">{new Date(startDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</p>
+                      : <p className="font-semibold text-muted-foreground text-lg">Выберите дату</p>
+                    }
+                    <p className="text-xs text-muted-foreground mt-1">День первого введения препарата</p>
+                  </div>
+                  <Icon name="ChevronRight" size={18} className="text-muted-foreground flex-shrink-0 opacity-50" />
                 </div>
-                <div className="flex-1">
-                  {startDate
-                    ? <p className="font-semibold text-foreground text-lg">{new Date(startDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</p>
-                    : <p className="text-muted-foreground">Выберите дату</p>
-                  }
-                  <p className="text-xs text-muted-foreground mt-0.5">День первого введения препарата</p>
-                </div>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
               </label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer" />
             </div>
           )}
 

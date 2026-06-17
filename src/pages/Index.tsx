@@ -732,13 +732,12 @@ export default function Index() {
           <section className="pb-24">
             {(() => {
               const cards: { key: Section; icon: string; label: string; desc: string; accent: string }[] = [
-                { key: "journey",      icon: "Route",        label: "Путь пациента",       desc: "Персональный план лечения от консилиума до завершения курса.",   accent: "#6366f1" },
-                { key: "tracker",      icon: "Activity",     label: "Трекер шкал",         desc: "ECOG, боль по ВАШ, тревожность по GAD-7.",                        accent: "#a78bfa" },
-                { key: "diary",        icon: "NotebookPen",  label: "Дневник",             desc: "Ежедневные записи о состоянии и динамика между визитами.",         accent: "#60a5fa" },
-                { key: "calendar",     icon: "CalendarDays", label: "Календарь",           desc: "Приёмы, процедуры, анализы — все события в одном месте.",         accent: "#34d399" },
-                { key: "reference",    icon: "BookOpen",     label: "Справочник",          desc: "Нозологии онкоурологии: симптомы, диагностика, стадии.",          accent: "#f59e0b" },
-                { key: "anxiety",      icon: "HeartPulse",   label: "Психо-\nэмоциональное", desc: "Скрининг тревоги, депрессии и эмоционального фона.",           accent: "#f472b6" },
-                { key: "achievements", icon: "Trophy",       label: "Достижения",          desc: "Медали за пройденные этапы лечения и ваши победы.",              accent: "#e879f9" },
+                { key: "journey",      icon: "Route",        label: "Путь пациента",  desc: "Персональный план лечения от консилиума до завершения курса.", accent: "#6366f1" },
+                { key: "tracker",      icon: "Activity",     label: "Трекер шкал",   desc: "ECOG, боль по ВАШ, тревожность по GAD-7.",                       accent: "#a78bfa" },
+                { key: "diary",        icon: "NotebookPen",  label: "Дневник",        desc: "Ежедневные записи о состоянии и динамика между визитами.",        accent: "#60a5fa" },
+                { key: "calendar",     icon: "CalendarDays", label: "Календарь",      desc: "Приёмы, процедуры, анализы — все события в одном месте.",        accent: "#34d399" },
+                { key: "reference",    icon: "BookOpen",     label: "Справочник",     desc: "Нозологии онкоурологии: симптомы, диагностика, стадии.",         accent: "#f59e0b" },
+                { key: "achievements", icon: "Trophy",       label: "Достижения",     desc: "Медали за пройденные этапы лечения и ваши победы.",             accent: "#e879f9" },
               ];
 
               // Card width is 1/5.5 of container so 6 cards with ~10% overlap fill the row
